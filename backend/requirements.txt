@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+yt-dlp
+youtube-transcript-api
+httpx
+rapidfuzz
