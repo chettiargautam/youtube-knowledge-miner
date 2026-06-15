@@ -46,6 +46,13 @@ class VideoSearchRequest(BaseModel):
     auto_select_threshold: float = Field(default=55, ge=0, le=100)
 
 
+class TopicVideoSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    limit: int = Field(default=50, ge=1, le=100)
+    enrich: bool = False
+    auto_select_threshold: float = Field(default=80, ge=0, le=100)
+
+
 class RankVideosRequest(BaseModel):
     query: str = Field(..., min_length=1)
     videos: list[VideoMetadata]
@@ -66,6 +73,13 @@ class RankVideosResponse(BaseModel):
 
 class VideoSearchResponse(BaseModel):
     channel_url: str
+    query: str
+    total_count: int | None = None
+    candidate_count: int
+    videos: list[RankedVideo]
+
+
+class TopicVideoSearchResponse(BaseModel):
     query: str
     total_count: int | None = None
     candidate_count: int

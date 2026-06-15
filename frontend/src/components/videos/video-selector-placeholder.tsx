@@ -10,7 +10,7 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   createKnowledgeBase,
@@ -18,6 +18,7 @@ import {
   pickKnowledgeBaseFolder,
   resolveChannelCandidates,
   searchVideos,
+  searchTopicVideos,
 } from "@/lib/api";
 import { readSelectedChannel, saveSelectedChannel } from "@/lib/selection-store";
 import type { ChannelCandidate } from "@/types/channel";
@@ -34,6 +35,9 @@ import {
 import { Input } from "@/components/ui/input";
 
 const PAGE_SIZE = 100;
+const TOPIC_PAGE_SIZE = 50;
+const DEFAULT_TOPIC_LIMIT = 50;
+const MAX_TOPIC_LIMIT = 100;
 
 function formatNumber(value: number | null): string {
   return value === null ? "-" : value.toLocaleString("en-US");
@@ -68,10 +72,28 @@ function scoreTone(score: number): string {
   return "bg-amber-500/15 text-amber-600";
 }
 
+function titleFromTopic(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function VideoSelectorPlaceholder() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const channelUrl = searchParams.get("channelUrl") ?? "";
+  const topic = searchParams.get("topic") ?? "";
+  const topicLimitFromUrl = Number.parseInt(
+    searchParams.get("limit") ?? DEFAULT_TOPIC_LIMIT.toString(),
+    10
+  );
+  const topicLimit =
+    Number.isFinite(topicLimitFromUrl) && topicLimitFromUrl > 0
+      ? Math.min(MAX_TOPIC_LIMIT, topicLimitFromUrl)
+      : DEFAULT_TOPIC_LIMIT;
   const sourceSearch = searchParams.get("search") ?? "";
   const pageFromUrl = Number.parseInt(searchParams.get("page") ?? "1", 10);
   const [channel, setChannel] = useState<ChannelCandidate | null>(null);
@@ -95,11 +117,21 @@ export function VideoSelectorPlaceholder() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchingVideos, setIsSearchingVideos] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const isTopicMode = topic.trim().length > 0;
+  const topicTitle = titleFromTopic(topic);
+  const topicUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    topic
+  )}`;
 
   useEffect(() => {
     let isCurrent = true;
 
     async function loadChannel() {
+      if (isTopicMode) {
+        setChannel(null);
+        return;
+      }
+
       if (channelUrl) {
         const stored = readSelectedChannel();
 
@@ -146,9 +178,13 @@ export function VideoSelectorPlaceholder() {
     return () => {
       isCurrent = false;
     };
-  }, [channelUrl, router]);
+  }, [channelUrl, isTopicMode, router]);
 
   useEffect(() => {
+    if (isTopicMode) {
+      return;
+    }
+
     if (!channel) {
       return;
     }
@@ -202,10 +238,85 @@ export function VideoSelectorPlaceholder() {
     return () => {
       isCurrent = false;
     };
-  }, [channel, page]);
+  }, [channel, isTopicMode, page]);
 
   useEffect(() => {
-    if (!channel || rankedVideos.length > 0 || !hasMore || isLoading) {
+    if (!isTopicMode) {
+      return;
+    }
+
+    let isCurrent = true;
+    const activeTopic = topic.trim();
+
+    async function loadTopicVideos() {
+      if (!activeTopic) {
+        router.replace("/home");
+        return;
+      }
+
+      setIsLoading(true);
+      setErrorMessage("");
+      setSearchPage(1);
+      setQuery(activeTopic);
+
+      try {
+        const response = await searchTopicVideos({
+          query: activeTopic,
+          limit: topicLimit,
+        });
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setVideos([]);
+        setRankedVideos(response.videos);
+        setHasMore(false);
+        setTotalCount(response.total_count);
+        setSelectedVideoIds(() => {
+          const next = new Set<string>();
+          response.videos.forEach((video) => {
+            if (video.selected) {
+              next.add(video.video_id);
+            }
+          });
+          return next;
+        });
+        setSelectedVideosById(() => {
+          const next = new Map<string, VideoMetadata>();
+          response.videos.forEach((video) => {
+            if (video.selected) {
+              next.set(video.video_id, video);
+            }
+          });
+          return next;
+        });
+      } catch (error) {
+        if (!isCurrent) {
+          return;
+        }
+
+        setRankedVideos([]);
+        setTotalCount(null);
+        setErrorMessage(
+          error instanceof Error ? error.message : "Could not search videos."
+        );
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadTopicVideos();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isTopicMode, router, topic, topicLimit]);
+
+  useEffect(() => {
+    if (isTopicMode || !channel || rankedVideos.length > 0 || !hasMore || isLoading) {
       return;
     }
 
@@ -216,24 +327,25 @@ export function VideoSelectorPlaceholder() {
       enrich: false,
       includeTotal: false,
     }).catch(() => undefined);
-  }, [channel, hasMore, isLoading, page, rankedVideos.length]);
+  }, [channel, hasMore, isLoading, isTopicMode, page, rankedVideos.length]);
 
   function updatePage(nextPage: number) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", nextPage.toString());
-    router.push(`/videos?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`);
   }
 
   const isSearchMode = rankedVideos.length > 0;
-  const searchFirstIndex = (searchPage - 1) * PAGE_SIZE;
+  const activeSearchPageSize = isTopicMode ? TOPIC_PAGE_SIZE : PAGE_SIZE;
+  const searchFirstIndex = (searchPage - 1) * activeSearchPageSize;
   const displayedVideos = isSearchMode
-    ? rankedVideos.slice(searchFirstIndex, searchFirstIndex + PAGE_SIZE)
+    ? rankedVideos.slice(searchFirstIndex, searchFirstIndex + activeSearchPageSize)
     : videos;
   const visibleCount = isSearchMode ? rankedVideos.length : videos.length;
   const activePage = isSearchMode ? searchPage : page;
   const activeHasPrevious = activePage > 1;
   const activeHasNext = isSearchMode
-    ? searchFirstIndex + PAGE_SIZE < rankedVideos.length
+    ? searchFirstIndex + activeSearchPageSize < rankedVideos.length
     : hasMore;
 
   const firstResult = displayedVideos.length > 0
@@ -327,7 +439,7 @@ export function VideoSelectorPlaceholder() {
   async function runVideoSearch(): Promise<boolean> {
     const activeQuery = query.trim();
 
-    if (!channel || !activeQuery) {
+    if (!activeQuery || (!channel && !isTopicMode)) {
       return false;
     }
 
@@ -337,16 +449,21 @@ export function VideoSelectorPlaceholder() {
     setSearchPage(1);
 
     try {
-      const response = await searchVideos({
-        channelUrl: channel.url,
-        query: activeQuery,
-      });
+      const response = isTopicMode
+        ? await searchTopicVideos({
+            query: activeQuery,
+            limit: topicLimit,
+          })
+        : await searchVideos({
+            channelUrl: channel!.url,
+            query: activeQuery,
+          });
 
       setRankedVideos(response.videos);
       setHasMore(false);
       setTotalCount(response.total_count);
       setSelectedVideoIds((current) => {
-        const next = new Set(current);
+        const next = isTopicMode ? new Set<string>() : new Set(current);
         response.videos.forEach((video) => {
           if (video.selected) {
             next.add(video.video_id);
@@ -355,7 +472,7 @@ export function VideoSelectorPlaceholder() {
         return next;
       });
       setSelectedVideosById((current) => {
-        const next = new Map(current);
+        const next = isTopicMode ? new Map<string, VideoMetadata>() : new Map(current);
         response.videos.forEach((video) => {
           if (video.selected) {
             next.set(video.video_id, video);
@@ -383,7 +500,7 @@ export function VideoSelectorPlaceholder() {
   }
 
   async function handleCreateKnowledgeBase() {
-    if (!channel || selectedVideosById.size === 0 || !outputDir.trim()) {
+    if ((!channel && !isTopicMode) || selectedVideosById.size === 0 || !outputDir.trim()) {
       return;
     }
 
@@ -393,8 +510,8 @@ export function VideoSelectorPlaceholder() {
 
     try {
       const response = await createKnowledgeBase({
-        channelName: channel.name,
-        channelUrl: channel.url,
+        channelName: isTopicMode ? topicTitle : channel!.name,
+        channelUrl: isTopicMode ? topicUrl : channel!.url,
         outputDir: outputDir.trim(),
         videos: Array.from(selectedVideosById.values()),
         includeComments: true,
@@ -435,7 +552,7 @@ export function VideoSelectorPlaceholder() {
     }
   }
 
-  if (!channel) {
+  if (!channel && !isTopicMode) {
     return (
       <main className="flex h-screen items-center justify-center overflow-hidden bg-[var(--yt-page)] text-[var(--yt-foreground)]">
         <div className="flex items-center gap-3 text-sm text-[var(--yt-muted)]">
@@ -457,7 +574,9 @@ export function VideoSelectorPlaceholder() {
             <Button
               variant="ghost"
               onClick={() => {
-                if (sourceSearch) {
+                if (isTopicMode) {
+                  router.push("/home");
+                } else if (sourceSearch) {
                   router.push(`/channels?search=${encodeURIComponent(sourceSearch)}`);
                 } else {
                   router.push("/home");
@@ -471,7 +590,7 @@ export function VideoSelectorPlaceholder() {
 
             <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-[var(--yt-card)] px-3 py-2 backdrop-blur-xl">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 text-xs font-black text-white">
-                {channel.thumbnailUrl ? (
+                {!isTopicMode && channel?.thumbnailUrl ? (
                   <img
                     src={channel.thumbnailUrl}
                     alt={`${channel.name} thumbnail`}
@@ -479,14 +598,18 @@ export function VideoSelectorPlaceholder() {
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  channel.avatarUrl
+                  isTopicMode ? "YT" : channel?.avatarUrl
                 )}
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{channel.name}</p>
+                <p className="truncate text-sm font-semibold">
+                  {isTopicMode ? topicTitle : channel?.name}
+                </p>
                 <p className="truncate text-xs text-[var(--yt-muted)]">
-                  Subscribers: {channel.subscriberCount} · Videos: {channelVideoCountText}
+                  {isTopicMode
+                    ? `Topic search · Videos: ${topicLimit}`
+                    : `Subscribers: ${channel?.subscriberCount} · Videos: ${channelVideoCountText}`}
                 </p>
               </div>
             </div>
@@ -524,7 +647,11 @@ export function VideoSelectorPlaceholder() {
                     void runVideoSearch();
                   }
                 }}
-                placeholder="Search videos by title, description, date, or views"
+                placeholder={
+                  isTopicMode
+                    ? "Search within topic results"
+                    : "Search videos by title, description, date, or views"
+                }
                 className="h-11 rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] pl-11 text-[var(--yt-foreground)]"
               />
             </div>
@@ -543,7 +670,7 @@ export function VideoSelectorPlaceholder() {
               Search Videos
             </Button>
 
-            {isSearchMode ? (
+            {isSearchMode && !isTopicMode ? (
               <Button
                 type="button"
                 variant="ghost"

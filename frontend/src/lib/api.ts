@@ -6,6 +6,7 @@ import type {
 import type {
   FolderPickResponse,
   KnowledgeBaseCreateResponse,
+  TopicVideoSearchResponse,
   VideoSearchResponse,
   VideoPageResponse,
   VideoMetadata,
@@ -290,6 +291,45 @@ export async function searchVideos({
   }
 
   return data as VideoSearchResponse;
+}
+
+export async function searchTopicVideos({
+  query,
+  limit = 50,
+}: {
+  query: string;
+  limit?: number;
+}): Promise<TopicVideoSearchResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/videos/topic-search`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      limit,
+      enrich: false,
+      auto_select_threshold: 80,
+    }),
+  });
+
+  let data: TopicVideoSearchResponse | { detail?: unknown };
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Backend returned a non-JSON response.");
+  }
+
+  if (!response.ok) {
+    const detail = "detail" in data ? data.detail : undefined;
+
+    throw new Error(
+      typeof detail === "string" ? detail : "Could not search videos."
+    );
+  }
+
+  return data as TopicVideoSearchResponse;
 }
 
 export async function createKnowledgeBase({

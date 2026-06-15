@@ -41,6 +41,13 @@ export type VideoSearchResponse = {
   videos: RankedVideo[];
 };
 
+export type TopicVideoSearchResponse = {
+  query: string;
+  total_count: number | null;
+  candidate_count: number;
+  videos: RankedVideo[];
+};
+
 export type KnowledgeBaseFileResult = {
   video_id: string;
   title: string;

@@ -14,11 +14,15 @@ import { Input } from "@/components/ui/input";
 import { ChannelCandidateCard } from "@/components/channel/channel-candidate-card";
 
 const RESULTS_PER_PAGE = 6;
+const DEFAULT_TOPIC_LIMIT = 50;
+const MAX_TOPIC_LIMIT = 100;
 
 type ChannelSearchHeroProps = {
   initialSearchQuery?: string;
   resultsOnly?: boolean;
 };
+
+type SearchMode = "channel" | "topic";
 
 export function ChannelSearchHero({
   initialSearchQuery = "",
@@ -37,6 +41,8 @@ export function ChannelSearchHero({
   const hasSearched = resultsOnly;
   const [errorMessage, setErrorMessage] = useState("");
   const [page, setPage] = useState(1);
+  const [mode, setMode] = useState<SearchMode>("channel");
+  const [topicLimit, setTopicLimit] = useState(DEFAULT_TOPIC_LIMIT);
 
   const canSearch = input.trim().length > 1 && !isSearching;
   const totalPages = Math.max(1, Math.ceil(candidates.length / RESULTS_PER_PAGE));
@@ -93,6 +99,15 @@ export function ChannelSearchHero({
     }
 
     const query = input.trim();
+
+    if (!resultsOnly && mode === "topic") {
+      const params = new URLSearchParams({
+        topic: query,
+        limit: Math.min(MAX_TOPIC_LIMIT, Math.max(1, topicLimit)).toString(),
+      });
+      router.push(`/topics?${params.toString()}`);
+      return;
+    }
 
     if (!resultsOnly) {
       setIsSearching(true);
@@ -190,15 +205,34 @@ export function ChannelSearchHero({
           }
         >
           {!hasSearched ? (
-            <h1 className="max-w-[1220px] text-balance text-5xl font-black leading-[0.95] tracking-[-0.065em] sm:text-6xl md:text-7xl lg:text-[5.8rem] xl:text-[6.7rem]">
-              Turn any{" "}
-              <YouTubeWordmark
-                className="inline-flex items-center gap-[0.12em] whitespace-nowrap align-[-0.08em]"
-                iconClassName="h-[0.64em] w-[0.92em] shrink-0 drop-shadow-[0_0_26px_rgba(220,38,38,0.28)]"
-                textClassName="font-black tracking-[-0.08em] text-[var(--yt-foreground)]"
-              />{" "}
-              channel into a clean research source.
-            </h1>
+            <>
+              <div className="mb-7 inline-grid grid-cols-2 rounded-full border border-[var(--yt-border)] bg-[var(--yt-card)] p-1 text-sm font-semibold backdrop-blur-xl">
+                {(["channel", "topic"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setMode(item)}
+                    className={`rounded-full px-5 py-2 transition ${
+                      mode === item
+                        ? "bg-[var(--yt-button)] text-[var(--yt-button-text)] shadow-lg"
+                        : "text-[var(--yt-muted)] hover:text-[var(--yt-foreground)]"
+                    }`}
+                  >
+                    {item === "channel" ? "Channel" : "Topic"}
+                  </button>
+                ))}
+              </div>
+
+              <h1 className="max-w-[1220px] text-balance text-5xl font-black leading-[0.95] tracking-[-0.065em] sm:text-6xl md:text-7xl lg:text-[5.8rem] xl:text-[6.7rem]">
+                Turn{" "}
+                <YouTubeWordmark
+                  className="inline-flex items-center gap-[0.12em] whitespace-nowrap align-[-0.08em]"
+                  iconClassName="h-[0.64em] w-[0.92em] shrink-0 drop-shadow-[0_0_26px_rgba(220,38,38,0.28)]"
+                  textClassName="font-black tracking-[-0.08em] text-[var(--yt-foreground)]"
+                />{" "}
+                videos into a clean research source.
+              </h1>
+            </>
           ) : (
             <div className="mb-3 flex w-full items-center justify-between gap-4">
               <div>
@@ -238,7 +272,11 @@ export function ChannelSearchHero({
               <Input
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Paste channel URL or exact channel name"
+                placeholder={
+                  mode === "topic"
+                    ? "Search videos by topic"
+                    : "Paste channel URL or exact channel name"
+                }
                 className="relative h-12 cursor-text rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] pl-12 pr-5 text-base text-[var(--yt-foreground)] shadow-2xl shadow-black/10 outline-none transition-all duration-300 ease-out placeholder:text-[var(--yt-subtle)] hover:-translate-y-0.5 hover:border-red-500/45 hover:bg-[var(--yt-card-strong)] hover:shadow-[0_0_0_1px_rgba(220,38,38,0.18),0_22px_70px_rgba(220,38,38,0.14)] focus-visible:-translate-y-0.5 focus-visible:border-red-500/60 focus-visible:ring-red-500/25"
               />
             </div>
@@ -255,12 +293,34 @@ export function ChannelSearchHero({
                 </>
               ) : (
                 <>
-                  Find channel
+                  {mode === "topic" ? "Find videos" : "Find channel"}
                   <Search className="ml-2 h-5 w-5 transition-transform duration-300 ease-out group-hover:translate-x-0.5 group-hover:scale-110" />
                 </>
               )}
             </Button>
           </form>
+
+          {!hasSearched && mode === "topic" ? (
+            <div className="mx-auto mt-4 flex items-center justify-center gap-3 text-sm text-[var(--yt-muted)]">
+              <span>Videos</span>
+              <Input
+                type="number"
+                min={1}
+                max={MAX_TOPIC_LIMIT}
+                value={topicLimit}
+                onChange={(event) => {
+                  const next = Number.parseInt(event.target.value, 10);
+                  setTopicLimit(
+                    Number.isFinite(next)
+                      ? Math.min(MAX_TOPIC_LIMIT, Math.max(1, next))
+                      : DEFAULT_TOPIC_LIMIT
+                  );
+                }}
+                className="h-10 w-24 rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] text-center text-[var(--yt-foreground)]"
+              />
+              <span>Max {MAX_TOPIC_LIMIT}</span>
+            </div>
+          ) : null}
 
           {errorMessage ? (
             <Card className="mx-auto mt-4 w-full max-w-5xl border-red-500/25 bg-red-600/10 p-4 text-left text-red-500">

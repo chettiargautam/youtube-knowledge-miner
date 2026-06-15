@@ -6,6 +6,8 @@ from app.schemas.video import (
     KnowledgeBaseCreateResponse,
     RankVideosRequest,
     RankVideosResponse,
+    TopicVideoSearchRequest,
+    TopicVideoSearchResponse,
     VideoSearchRequest,
     VideoSearchResponse,
     VideoPageRequest,
@@ -22,6 +24,7 @@ from app.services.youtube_videos import (
     enrich_videos,
     fetch_channel_video_catalog,
     fetch_channel_videos_page,
+    search_youtube_videos,
 )
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -83,6 +86,30 @@ def search_video_candidates(request: VideoSearchRequest) -> VideoSearchResponse:
         total_count=total_count,
         candidate_count=len(catalog),
         videos=videos,
+    )
+
+
+@router.post("/topic-search", response_model=TopicVideoSearchResponse)
+def search_topic_video_candidates(
+    request: TopicVideoSearchRequest,
+) -> TopicVideoSearchResponse:
+    videos = search_youtube_videos(request.query, limit=request.limit)
+
+    if request.enrich:
+        videos = enrich_videos(videos)
+
+    ranked = keyword_rank_videos(
+        query=request.query,
+        videos=videos,
+        limit=request.limit,
+        auto_select_threshold=request.auto_select_threshold,
+    )
+
+    return TopicVideoSearchResponse(
+        query=request.query,
+        total_count=len(videos),
+        candidate_count=len(videos),
+        videos=ranked,
     )
 
 

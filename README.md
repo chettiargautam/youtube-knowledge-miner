@@ -2,7 +2,7 @@
 
 Turn a YouTube channel into a clean, local knowledge base you can use with the AI tools you already trust.
 
-YouTube Knowledge Miner helps you find the right channel, search through its videos, select the videos that matter, and export them into a structured folder of Markdown files. Each file includes video metadata, description, transcript when available, and optional comments, so tools like Claude, Codex, Copilot, Cursor, or any local agent can ground answers in the source material.
+YouTube Knowledge Miner helps you find the right channel or start from a topic, search through relevant videos, select the videos that matter, and export them into a structured folder of Markdown files. Each file includes video metadata, description, transcript when available, and optional comments, so tools like Claude, Codex, Copilot, Cursor, or any local agent can ground answers in the source material.
 
 No hosted backend. No bundled LLM. No vendor lock-in. The app focuses on the part that needs to be reliable: mining useful YouTube source material into files you control.
 
@@ -10,7 +10,7 @@ No hosted backend. No bundled LLM. No vendor lock-in. The app focuses on the par
 
 Long-form YouTube channels can contain hundreds or thousands of hours of useful knowledge, but the material is hard to search, cite, or reuse. This project converts selected videos into a folder that behaves like a research corpus:
 
-- Find a channel by name, handle, or URL.
+- Find a channel by name, handle, or URL, or search directly by topic.
 - Browse and search videos without loading an entire channel into memory.
 - Select the videos worth keeping.
 - Export one Markdown file per video plus an `index.json`.
@@ -53,22 +53,23 @@ The app has three screens:
 
 1. **Home**
 
-   Search for a YouTube channel by typing a channel name, handle, or full channel URL.
+   Choose how you want to start.
 
-   - If you paste a valid channel URL, the app validates it and takes you directly to video selection.
-   - If you type a channel name, the app searches for matching channels and shows candidates sorted by subscriber count when available.
+   - **Channel**: type a channel name, handle, or full channel URL.
+   - **Topic**: type the subject you want to research and choose how many YouTube results to review, up to 100.
 
 2. **Channel Results**
 
-   Review matching channels, compare metadata, and choose the correct one.
+   When starting from a channel name, review matching channels, compare metadata, and choose the correct one.
 
    The channel result cards show the channel name, description, subscriber count when available, verification state when available, and a link back to YouTube for manual checking.
 
 3. **Video Selector**
 
-   Search and page through the selected channel’s videos, select the videos you want, and create a knowledge base.
+   Search and page through videos, select the videos you want, and create a knowledge base.
 
-   - Search videos by keyword.
+   - For channel mode, browse or search within the selected channel.
+   - For topic mode, review YouTube results for the topic query.
    - Review title, thumbnail, upload date, views, and relevance score.
    - Select individual videos or select all visible videos on the current page.
    - Choose an output folder from your system file picker.

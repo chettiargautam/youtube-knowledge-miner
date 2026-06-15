@@ -241,3 +241,21 @@ def enrich_videos(videos: list[VideoMetadata]) -> list[VideoMetadata]:
                 continue
 
     return [enriched_by_id.get(video.video_id, video) for video in videos]
+
+
+def search_youtube_videos(query: str, limit: int = 50) -> list[VideoMetadata]:
+    search_limit = max(1, min(limit, 100))
+
+    with make_ydl(
+        {
+            "extract_flat": "in_playlist",
+            "skip_download": True,
+        }
+    ) as ydl:
+        info = ydl.extract_info(f"ytsearch{search_limit}:{query}", download=False)
+
+    if not isinstance(info, dict):
+        return []
+
+    entries = [entry for entry in info.get("entries", []) if isinstance(entry, dict)]
+    return [video for video in (_flat_video_from_entry(entry) for entry in entries) if video]
