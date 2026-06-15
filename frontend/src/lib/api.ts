@@ -6,6 +6,7 @@ import type {
 import type {
   FolderPickResponse,
   KnowledgeBaseCreateResponse,
+  KnowledgeBaseProgressEvent,
   TopicVideoSearchResponse,
   VideoSearchResponse,
   VideoPageResponse,
@@ -254,7 +255,7 @@ export async function fetchVideoPage({
 export async function searchVideos({
   channelUrl,
   query,
-  limit,
+  limit = 1000,
 }: {
   channelUrl: string;
   query: string;
@@ -268,7 +269,7 @@ export async function searchVideos({
     body: JSON.stringify({
       channel_url: channelUrl,
       query,
-      ...(limit ? { limit } : {}),
+      limit,
       enrich: false,
       auto_select_threshold: 80,
     }),
@@ -383,6 +384,108 @@ export async function createKnowledgeBase({
   }
 
   return data as KnowledgeBaseCreateResponse;
+}
+
+export async function streamKnowledgeBaseCreation({
+  channelName,
+  channelUrl,
+  outputDir,
+  mode = "local",
+  videos,
+  includeComments = true,
+  onEvent,
+}: {
+  channelName: string;
+  channelUrl: string;
+  outputDir: string;
+  mode?: "local" | "download";
+  videos: VideoMetadata[];
+  includeComments?: boolean;
+  onEvent: (event: KnowledgeBaseProgressEvent) => void;
+}): Promise<KnowledgeBaseCreateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/videos/knowledge-base/stream?mode=${mode}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      channel_name: channelName,
+      channel_url: channelUrl,
+      output_dir: outputDir,
+      include_comments: includeComments,
+      max_comments: 50,
+      videos: videos.map((video) => ({
+        video_id: video.video_id,
+        url: video.url,
+        title: video.title,
+      })),
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    let detail = "Could not create the knowledge base.";
+
+    try {
+      const data = (await response.json()) as { detail?: unknown };
+      if (typeof data.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the stream fails before JSON is available.
+    }
+
+    throw new Error(detail);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: KnowledgeBaseCreateResponse | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        continue;
+      }
+
+      const event = JSON.parse(trimmed) as KnowledgeBaseProgressEvent;
+      onEvent(event);
+
+      if (event.type === "done") {
+        result = event.result;
+      }
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (!result) {
+    throw new Error("Knowledge base creation ended before returning a result.");
+  }
+
+  return result;
+}
+
+export function downloadKnowledgeBasePackage(result: KnowledgeBaseCreateResponse): void {
+  if (!result.download_url) {
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.href = `${API_BASE_URL}${result.download_url}`;
+  link.download = result.download_filename ?? "youtube-knowledge-base.zip";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export async function pickKnowledgeBaseFolder(): Promise<FolderPickResponse> {

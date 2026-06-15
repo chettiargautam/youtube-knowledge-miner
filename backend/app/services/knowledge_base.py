@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import json
 import re
+from collections.abc import Iterator
 
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -135,6 +136,21 @@ Status: {transcript_status}
 def create_knowledge_base(
     request: KnowledgeBaseCreateRequest,
 ) -> KnowledgeBaseCreateResponse:
+    result: KnowledgeBaseCreateResponse | None = None
+
+    for event in create_knowledge_base_events(request):
+        if event.get("type") == "done":
+            result = event["result"]
+
+    if result is None:
+        raise RuntimeError("Knowledge base creation did not complete.")
+
+    return result
+
+
+def create_knowledge_base_events(
+    request: KnowledgeBaseCreateRequest,
+) -> Iterator[dict]:
     root = Path(request.output_dir).expanduser().resolve()
     channel_dir = root / _safe_filename(request.channel_name, "youtube-channel")
     channel_dir.mkdir(parents=True, exist_ok=True)
@@ -148,62 +164,110 @@ def create_knowledge_base(
             "download_transcribe_if_missing is not implemented yet; caption transcripts were attempted."
         )
 
-    for index, video in enumerate(request.videos, start=1):
-        info = _fetch_video_info(
-            video,
-            request.include_comments,
-            request.max_comments,
-        )
-        metadata = _metadata_from_info(info) if info else None
+    total = len(request.videos)
 
-        if metadata is None:
-            metadata = VideoMetadata(
-                video_id=video.video_id,
-                url=_video_url(video),
-                title=video.title or video.video_id,
+    yield {
+        "type": "start",
+        "total": total,
+        "completed": 0,
+        "output_path": str(channel_dir),
+    }
+
+    for index, video in enumerate(request.videos, start=1):
+        yield {
+            "type": "video_started",
+            "index": index,
+            "total": total,
+            "completed": len(results),
+            "video": {
+                "video_id": video.video_id,
+                "title": video.title or video.video_id,
+                "url": _video_url(video),
+            },
+        }
+
+        try:
+            info = _fetch_video_info(
+                video,
+                request.include_comments,
+                request.max_comments,
+            )
+            metadata = _metadata_from_info(info) if info else None
+
+            if metadata is None:
+                metadata = VideoMetadata(
+                    video_id=video.video_id,
+                    url=_video_url(video),
+                    title=video.title or video.video_id,
+                )
+
+            transcript, transcript_status = _fetch_transcript(metadata.video_id)
+            comments = _extract_comments(
+                info,
+                request.max_comments if request.include_comments else 0,
             )
 
-        transcript, transcript_status = _fetch_transcript(metadata.video_id)
-        comments = _extract_comments(info, request.max_comments if request.include_comments else 0)
+            filename = f"{index:03d} - {_safe_filename(metadata.title, metadata.video_id)}.md"
+            file_path = channel_dir / filename
+            if file_path.exists():
+                file_path.unlink()
 
-        filename = f"{index:03d} - {_safe_filename(metadata.title, metadata.video_id)}.md"
-        file_path = channel_dir / filename
-        if file_path.exists():
-            file_path.unlink()
+            file_path.write_text(
+                _markdown_for_video(
+                    channel_name=request.channel_name,
+                    channel_url=request.channel_url,
+                    metadata=metadata,
+                    transcript=transcript,
+                    transcript_status=transcript_status,
+                    comments=comments,
+                ),
+                encoding="utf-8",
+            )
 
-        file_path.write_text(
-            _markdown_for_video(
-                channel_name=request.channel_name,
-                channel_url=request.channel_url,
-                metadata=metadata,
-                transcript=transcript,
-                transcript_status=transcript_status,
-                comments=comments,
-            ),
-            encoding="utf-8",
-        )
-
-        results.append(
-            KnowledgeBaseFileResult(
+            file_result = KnowledgeBaseFileResult(
                 video_id=metadata.video_id,
                 title=metadata.title,
                 file_path=str(file_path),
                 transcript_status=transcript_status,
                 comments_count=len(comments),
             )
-        )
-        index_items.append(
-            {
-                "video_id": metadata.video_id,
-                "title": metadata.title,
-                "url": metadata.url,
-                "file": file_path.name,
-                "upload_date": metadata.upload_date,
-                "transcript_status": transcript_status,
-                "comments_count": len(comments),
-                "description_preview": (metadata.description or "")[:500],
+            results.append(file_result)
+            index_items.append(
+                {
+                    "video_id": metadata.video_id,
+                    "title": metadata.title,
+                    "url": metadata.url,
+                    "file": file_path.name,
+                    "upload_date": metadata.upload_date,
+                    "transcript_status": transcript_status,
+                    "comments_count": len(comments),
+                    "description_preview": (metadata.description or "")[:500],
+                }
+            )
+
+            yield {
+                "type": "video_done",
+                "index": index,
+                "total": total,
+                "completed": index,
+                "video": file_result.model_dump(),
             }
-        )
+        except Exception as exc:
+            warning = f"Skipped {video.title or video.video_id}: {exc}"
+            warnings.append(warning)
+            yield {
+                "type": "video_error",
+                "index": index,
+                "total": total,
+                "completed": len(results),
+                "video": {
+                    "video_id": video.video_id,
+                    "title": video.title or video.video_id,
+                    "url": _video_url(video),
+                },
+                "message": warning,
+            }
+            continue
 
     index_path = channel_dir / "index.json"
     if index_path.exists():
@@ -222,9 +286,16 @@ def create_knowledge_base(
         encoding="utf-8",
     )
 
-    return KnowledgeBaseCreateResponse(
+    result = KnowledgeBaseCreateResponse(
         output_path=str(channel_dir),
         count=len(results),
         files=results,
         warnings=warnings,
     )
+
+    yield {
+        "type": "done",
+        "total": total,
+        "completed": total,
+        "result": result,
+    }

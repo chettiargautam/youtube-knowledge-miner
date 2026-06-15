@@ -61,7 +61,53 @@ export type KnowledgeBaseCreateResponse = {
   count: number;
   files: KnowledgeBaseFileResult[];
   warnings: string[];
+  download_url: string | null;
+  download_filename: string | null;
 };
+
+export type KnowledgeBaseProgressEvent =
+  | {
+      type: "start";
+      total: number;
+      completed: number;
+      output_path: string;
+    }
+  | {
+      type: "video_started";
+      index: number;
+      total: number;
+      completed: number;
+      video: {
+        video_id: string;
+        title: string;
+        url: string;
+      };
+    }
+  | {
+      type: "video_done";
+      index: number;
+      total: number;
+      completed: number;
+      video: KnowledgeBaseFileResult;
+    }
+  | {
+      type: "video_error";
+      index: number;
+      total: number;
+      completed: number;
+      video: {
+        video_id: string;
+        title: string;
+        url: string;
+      };
+      message: string;
+    }
+  | {
+      type: "done";
+      total: number;
+      completed: number;
+      result: KnowledgeBaseCreateResponse;
+    };
 
 export type FolderPickResponse = {
   path: string | null;

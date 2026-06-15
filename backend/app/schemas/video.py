@@ -95,7 +95,7 @@ class KnowledgeBaseVideoInput(BaseModel):
 class KnowledgeBaseCreateRequest(BaseModel):
     channel_name: str = Field(..., min_length=1)
     channel_url: str = Field(..., min_length=1)
-    output_dir: str = Field(..., min_length=1)
+    output_dir: str = Field(default="", min_length=0)
     videos: list[KnowledgeBaseVideoInput] = Field(..., min_length=1)
     include_comments: bool = True
     max_comments: int = Field(default=50, ge=0, le=500)
@@ -115,6 +115,8 @@ class KnowledgeBaseCreateResponse(BaseModel):
     count: int
     files: list[KnowledgeBaseFileResult]
     warnings: list[str] = []
+    download_url: str | None = None
+    download_filename: str | None = None
 
 
 class FolderPickResponse(BaseModel):

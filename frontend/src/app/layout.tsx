@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import { ThemeInitScript } from "@/components/theme/theme-init-script";
 import { ThemeSync } from "@/components/theme/theme-sync";
+import { CursorSpotlight } from "@/components/ui/cursor-spotlight";
 
 import "./globals.css";
 
@@ -15,6 +16,11 @@ export const metadata: Metadata = {
   title: "YT Knowledge Base Miner",
   description:
     "Turn any YouTube channel into a searchable topic-specific knowledge base.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -29,6 +35,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} antialiased`}>
         <ThemeSync />
+        <CursorSpotlight />
         {children}
       </body>
     </html>

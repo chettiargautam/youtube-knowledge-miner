@@ -1,4 +1,11 @@
-from fastapi import APIRouter
+import json
+import shutil
+import tempfile
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.schemas.video import (
     FolderPickResponse,
@@ -18,7 +25,7 @@ from app.services.video_ranker import (
     keyword_rank_videos,
     rank_videos,
 )
-from app.services.knowledge_base import create_knowledge_base
+from app.services.knowledge_base import create_knowledge_base, create_knowledge_base_events
 from app.services.folder_picker import pick_folder
 from app.services.youtube_videos import (
     enrich_videos,
@@ -28,6 +35,7 @@ from app.services.youtube_videos import (
 )
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
+DOWNLOAD_PACKAGES: dict[str, Path] = {}
 
 
 @router.post("/page", response_model=VideoPageResponse)
@@ -118,6 +126,68 @@ def create_video_knowledge_base(
     request: KnowledgeBaseCreateRequest,
 ) -> KnowledgeBaseCreateResponse:
     return create_knowledge_base(request)
+
+
+@router.post("/knowledge-base/stream")
+def stream_video_knowledge_base(
+    request: KnowledgeBaseCreateRequest,
+    mode: str = "local",
+) -> StreamingResponse:
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+
+    if mode == "download":
+        temp_dir = tempfile.TemporaryDirectory(prefix="ytkb-")
+        request = request.model_copy(update={"output_dir": temp_dir.name})
+    elif mode != "local":
+        raise HTTPException(status_code=400, detail="Mode must be local or download.")
+
+    def event_stream():
+        for event in create_knowledge_base_events(request):
+            if event.get("type") == "done" and mode == "download":
+                result = event["result"]
+                package_id = uuid.uuid4().hex
+                zip_base = Path(tempfile.gettempdir()) / f"ytkb-{package_id}"
+                output_path = Path(result.output_path)
+                zip_path = Path(
+                    shutil.make_archive(
+                        str(zip_base),
+                        "zip",
+                        root_dir=output_path.parent,
+                        base_dir=output_path.name,
+                    )
+                )
+                DOWNLOAD_PACKAGES[package_id] = zip_path
+                result = result.model_copy(
+                    update={
+                        "download_url": f"/api/videos/knowledge-base/download/{package_id}",
+                        "download_filename": zip_path.name,
+                    }
+                )
+                event = {
+                    **event,
+                    "result": result,
+                }
+
+            yield json.dumps(event, default=lambda value: value.model_dump()) + "\n"
+
+        if temp_dir is not None:
+            temp_dir.cleanup()
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@router.get("/knowledge-base/download/{package_id}")
+def download_knowledge_base_package(package_id: str) -> FileResponse:
+    zip_path = DOWNLOAD_PACKAGES.get(package_id)
+
+    if not zip_path or not zip_path.exists():
+        raise HTTPException(status_code=404, detail="Download package not found.")
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=zip_path.name,
+    )
 
 
 @router.get("/knowledge-base/folder", response_model=FolderPickResponse)

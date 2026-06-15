@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Download,
   ExternalLink,
   FolderOpen,
   Loader2,
@@ -13,16 +15,21 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
-  createKnowledgeBase,
+  downloadKnowledgeBasePackage,
   fetchVideoPage,
   pickKnowledgeBaseFolder,
   resolveChannelCandidates,
   searchVideos,
   searchTopicVideos,
+  streamKnowledgeBaseCreation,
 } from "@/lib/api";
 import { readSelectedChannel, saveSelectedChannel } from "@/lib/selection-store";
 import type { ChannelCandidate } from "@/types/channel";
-import type { RankedVideo, VideoMetadata } from "@/types/video";
+import type {
+  KnowledgeBaseProgressEvent,
+  RankedVideo,
+  VideoMetadata,
+} from "@/types/video";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -38,6 +45,15 @@ const PAGE_SIZE = 100;
 const TOPIC_PAGE_SIZE = 50;
 const DEFAULT_TOPIC_LIMIT = 50;
 const MAX_TOPIC_LIMIT = 100;
+const KNOWLEDGE_BASE_STAGES = [
+  "Fetching video title and metadata",
+  "Reading description and channel context",
+  "Extracting transcript content",
+  "Picking top comments",
+  "Creating context files",
+];
+
+type KnowledgeBaseMode = "local" | "download";
 
 function formatNumber(value: number | null): string {
   return value === null ? "-" : value.toLocaleString("en-US");
@@ -80,10 +96,37 @@ function titleFromTopic(value: string): string {
     .join(" ");
 }
 
+function ProgressRail({
+  label,
+  detail,
+  active,
+}: {
+  label: string;
+  detail: string;
+  active: boolean;
+}) {
+  if (!active) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-full border border-[var(--yt-border)] bg-[var(--yt-card)] shadow-xl shadow-black/10">
+      <div className="flex items-center justify-between gap-4 px-4 py-2 text-xs text-[var(--yt-muted)]">
+        <span className="font-semibold text-[var(--yt-foreground)]">{label}</span>
+        <span className="truncate">{detail}</span>
+      </div>
+      <div className="h-1.5 bg-[var(--yt-card-strong)]">
+        <div className="h-full w-2/5 animate-[progress-slide_1.25s_ease-in-out_infinite] rounded-full bg-red-600 shadow-[0_0_24px_rgba(220,38,38,0.55)]" />
+      </div>
+    </div>
+  );
+}
+
 export function VideoSelectorPlaceholder() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const channelUrl = searchParams.get("channelUrl") ?? "";
   const topic = searchParams.get("topic") ?? "";
   const topicLimitFromUrl = Number.parseInt(
@@ -105,11 +148,19 @@ export function VideoSelectorPlaceholder() {
   );
   const [query, setQuery] = useState("");
   const [outputDir, setOutputDir] = useState("");
+  const [knowledgeBaseMode, setKnowledgeBaseMode] =
+    useState<KnowledgeBaseMode>("local");
   const [isKnowledgeDialogOpen, setIsKnowledgeDialogOpen] = useState(false);
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [knowledgeBaseResult, setKnowledgeBaseResult] = useState("");
   const [knowledgeBaseError, setKnowledgeBaseError] = useState("");
+  const [knowledgeBaseTotal, setKnowledgeBaseTotal] = useState(0);
+  const [knowledgeBaseCompleted, setKnowledgeBaseCompleted] = useState(0);
+  const [knowledgeBaseCurrentVideo, setKnowledgeBaseCurrentVideo] =
+    useState<VideoMetadata | null>(null);
+  const [knowledgeBaseSkipped, setKnowledgeBaseSkipped] = useState<string[]>([]);
+  const [knowledgeBaseStageIndex, setKnowledgeBaseStageIndex] = useState(0);
   const [searchPage, setSearchPage] = useState(1);
   const page = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
   const [hasMore, setHasMore] = useState(false);
@@ -117,11 +168,37 @@ export function VideoSelectorPlaceholder() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchingVideos, setIsSearchingVideos] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isExpandSearchVisible, setIsExpandSearchVisible] = useState(false);
+  const [expandedTopicLimit, setExpandedTopicLimit] = useState(
+    Math.min(MAX_TOPIC_LIMIT, DEFAULT_TOPIC_LIMIT + 25).toString()
+  );
   const isTopicMode = topic.trim().length > 0;
   const topicTitle = titleFromTopic(topic);
   const topicUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
     topic
   )}`;
+  const isBusy =
+    isLoading || isSearchingVideos || isCreatingKnowledgeBase || isPickingFolder;
+  const progressLabel = isCreatingKnowledgeBase
+    ? "Building knowledge base"
+    : isPickingFolder
+    ? "Opening folder picker"
+    : isSearchingVideos
+    ? "Ranking videos"
+    : isLoading
+    ? isTopicMode
+      ? "Loading topic videos"
+      : "Loading channel catalog"
+    : "";
+  const progressDetail = isCreatingKnowledgeBase
+    ? "Fetching transcripts, comments, and writing Markdown files"
+    : isPickingFolder
+    ? "Waiting for a local folder selection"
+    : isSearchingVideos
+    ? "Scanning titles, descriptions, tags, and popularity signals"
+    : isLoading
+    ? "Fetching results from YouTube through the local backend"
+    : "";
 
   useEffect(() => {
     let isCurrent = true;
@@ -179,6 +256,18 @@ export function VideoSelectorPlaceholder() {
       isCurrent = false;
     };
   }, [channelUrl, isTopicMode, router]);
+
+  useEffect(() => {
+    if (!isCreatingKnowledgeBase) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setKnowledgeBaseStageIndex((value) => (value + 1) % KNOWLEDGE_BASE_STAGES.length);
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [isCreatingKnowledgeBase]);
 
   useEffect(() => {
     if (isTopicMode) {
@@ -335,6 +424,51 @@ export function VideoSelectorPlaceholder() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
+  function handleTableScroll() {
+    const element = tableScrollRef.current;
+
+    if (
+      !element ||
+      !isTopicMode ||
+      isBusy ||
+      topicLimit >= MAX_TOPIC_LIMIT ||
+      rankedVideos.length === 0
+    ) {
+      return;
+    }
+
+    const bottomGap = element.scrollHeight - element.scrollTop - element.clientHeight;
+
+    if (bottomGap < 36) {
+      if (!isExpandSearchVisible) {
+        setExpandedTopicLimit(Math.min(MAX_TOPIC_LIMIT, topicLimit + 25).toString());
+      }
+
+      setIsExpandSearchVisible(true);
+    } else if (bottomGap > 160) {
+      setIsExpandSearchVisible(false);
+    }
+  }
+
+  function handleExpandTopicSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextLimit = Math.min(
+      MAX_TOPIC_LIMIT,
+      Math.max(topicLimit + 1, Number.parseInt(expandedTopicLimit, 10) || topicLimit)
+    );
+
+    if (nextLimit <= topicLimit) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("topic", topic.trim());
+    params.set("limit", nextLimit.toString());
+    setIsExpandSearchVisible(false);
+    router.push(`/topics?${params.toString()}`);
+  }
+
   const isSearchMode = rankedVideos.length > 0;
   const activeSearchPageSize = isTopicMode ? TOPIC_PAGE_SIZE : PAGE_SIZE;
   const searchFirstIndex = (searchPage - 1) * activeSearchPageSize;
@@ -376,6 +510,25 @@ export function VideoSelectorPlaceholder() {
     visibleVideoIds.length > 0 && selectedVisibleCount === visibleVideoIds.length;
   const areSomeVisibleSelected =
     selectedVisibleCount > 0 && selectedVisibleCount < visibleVideoIds.length;
+  const knowledgeBaseProgressTotal =
+    knowledgeBaseTotal || selectedVideosById.size || selectedVideoIds.size;
+  const knowledgeBaseProgressPercent =
+    knowledgeBaseProgressTotal > 0
+      ? Math.round((knowledgeBaseCompleted / knowledgeBaseProgressTotal) * 100)
+      : 0;
+  const progressHue = Math.round((knowledgeBaseProgressPercent / 100) * 130);
+  const knowledgeBaseStage = KNOWLEDGE_BASE_STAGES[knowledgeBaseStageIndex];
+  const knowledgeBaseProgressStyle = {
+    width: `${Math.min(100, Math.max(0, knowledgeBaseProgressPercent))}%`,
+    background: `linear-gradient(90deg, hsl(${progressHue} 78% 48%), hsl(${Math.min(
+      135,
+      progressHue + 18
+    )} 76% 52%))`,
+  };
+
+  function findSelectedVideo(videoId: string): VideoMetadata | null {
+    return selectedVideosById.get(videoId) ?? null;
+  }
 
   function toggleVideo(video: VideoMetadata) {
     setSelectedVideoIds((current) => {
@@ -500,26 +653,72 @@ export function VideoSelectorPlaceholder() {
   }
 
   async function handleCreateKnowledgeBase() {
-    if ((!channel && !isTopicMode) || selectedVideosById.size === 0 || !outputDir.trim()) {
+    if (
+      (!channel && !isTopicMode) ||
+      selectedVideosById.size === 0 ||
+      (knowledgeBaseMode === "local" && !outputDir.trim())
+    ) {
       return;
     }
+
+    const selectedVideos = Array.from(selectedVideosById.values());
 
     setIsCreatingKnowledgeBase(true);
     setKnowledgeBaseError("");
     setKnowledgeBaseResult("");
+    setKnowledgeBaseTotal(selectedVideos.length);
+    setKnowledgeBaseCompleted(0);
+    setKnowledgeBaseSkipped([]);
+    setKnowledgeBaseStageIndex(0);
+    setKnowledgeBaseCurrentVideo(selectedVideos[0] ?? null);
 
     try {
-      const response = await createKnowledgeBase({
+      const response = await streamKnowledgeBaseCreation({
         channelName: isTopicMode ? topicTitle : channel!.name,
         channelUrl: isTopicMode ? topicUrl : channel!.url,
-        outputDir: outputDir.trim(),
-        videos: Array.from(selectedVideosById.values()),
+        outputDir: knowledgeBaseMode === "local" ? outputDir.trim() : "",
+        mode: knowledgeBaseMode,
+        videos: selectedVideos,
         includeComments: true,
+        onEvent: (event: KnowledgeBaseProgressEvent) => {
+          if (event.type === "start") {
+            setKnowledgeBaseTotal(event.total);
+            setKnowledgeBaseCompleted(event.completed);
+            return;
+          }
+
+          if (event.type === "video_started") {
+            setKnowledgeBaseCurrentVideo(findSelectedVideo(event.video.video_id));
+            setKnowledgeBaseCompleted(event.completed);
+            return;
+          }
+
+          if (event.type === "video_done") {
+            setKnowledgeBaseCompleted(event.completed);
+            return;
+          }
+
+          if (event.type === "video_error") {
+            setKnowledgeBaseSkipped((current) => [...current, event.message]);
+            setKnowledgeBaseCompleted(event.index);
+            return;
+          }
+
+          if (event.type === "done") {
+            setKnowledgeBaseCompleted(event.completed);
+          }
+        },
       });
 
       setKnowledgeBaseResult(
-        `Created ${response.count} files in ${response.output_path}`
+        knowledgeBaseMode === "download"
+          ? `Created ${response.count} files. Download ready.`
+          : `Created ${response.count} files in ${response.output_path}`
       );
+
+      if (knowledgeBaseMode === "download") {
+        downloadKnowledgeBasePackage(response);
+      }
     } catch (error) {
       setKnowledgeBaseError(
         error instanceof Error
@@ -573,6 +772,7 @@ export function VideoSelectorPlaceholder() {
           <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
+              disabled={isBusy}
               onClick={() => {
                 if (isTopicMode) {
                   router.push("/home");
@@ -621,7 +821,7 @@ export function VideoSelectorPlaceholder() {
               </span>
               <Button
                 type="button"
-                disabled={selectedVideoIds.size === 0}
+                disabled={selectedVideoIds.size === 0 || isBusy}
                 onClick={() => {
                   setKnowledgeBaseError("");
                   setKnowledgeBaseResult("");
@@ -658,7 +858,7 @@ export function VideoSelectorPlaceholder() {
 
             <Button
               type="button"
-              disabled={!query.trim() || isSearchingVideos}
+              disabled={!query.trim() || isBusy}
               onClick={() => void runVideoSearch()}
               className="h-11 rounded-full px-6"
             >
@@ -674,6 +874,7 @@ export function VideoSelectorPlaceholder() {
               <Button
                 type="button"
                 variant="ghost"
+                disabled={isBusy}
                 onClick={clearVideoSearch}
                 className="h-11 rounded-full px-5"
               >
@@ -688,7 +889,7 @@ export function VideoSelectorPlaceholder() {
             </span>
             <Button
               variant="ghost"
-              disabled={!activeHasPrevious || isLoading}
+              disabled={!activeHasPrevious || isBusy}
               onClick={() => updateVisiblePage(Math.max(1, activePage - 1))}
               className="h-10 rounded-full px-3"
             >
@@ -700,7 +901,7 @@ export function VideoSelectorPlaceholder() {
             </span>
             <Button
               variant="ghost"
-              disabled={!activeHasNext || isLoading}
+              disabled={!activeHasNext || isBusy}
               onClick={() => updateVisiblePage(activePage + 1)}
               className="h-10 rounded-full px-3"
             >
@@ -710,14 +911,29 @@ export function VideoSelectorPlaceholder() {
           </div>
         </div>
 
+        <div className="mb-3 shrink-0">
+          <ProgressRail
+            label={progressLabel}
+            detail={progressDetail}
+            active={isBusy}
+          />
+        </div>
+
         <Dialog open={isKnowledgeDialogOpen} onOpenChange={setIsKnowledgeDialogOpen}>
-          <DialogContent className="bg-[var(--yt-page)] text-[var(--yt-foreground)] sm:max-w-lg">
+          <DialogContent
+            showCloseButton={!isCreatingKnowledgeBase}
+            className={`bg-[var(--yt-page)] text-[var(--yt-foreground)] transition-all duration-300 ${
+              isCreatingKnowledgeBase || knowledgeBaseResult || knowledgeBaseSkipped.length > 0
+                ? "sm:max-w-2xl"
+                : "sm:max-w-lg"
+            }`}
+          >
             <DialogHeader>
-              <DialogTitle>Create Knowledge Base</DialogTitle>
-              <DialogDescription>
-                Choose a local folder. The backend will create a channel folder
-                and one Markdown file per selected video, replacing matching files
-                that already exist.
+              <DialogTitle className="text-xl font-black tracking-tight">
+                Create Knowledge Base
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Create local Markdown context files from selected videos.
               </DialogDescription>
             </DialogHeader>
 
@@ -728,69 +944,138 @@ export function VideoSelectorPlaceholder() {
                 void handleCreateKnowledgeBase();
               }}
             >
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <Input
-                  value={outputDir}
-                  disabled={isCreatingKnowledgeBase || isPickingFolder}
-                  onChange={(event) => setOutputDir(event.target.value)}
-                  placeholder="No folder selected"
-                  className="h-11 rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] px-5 text-[var(--yt-foreground)]"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isCreatingKnowledgeBase || isPickingFolder}
-                  onClick={() => void handlePickOutputFolder()}
-                  className="h-11 rounded-full border-[var(--yt-border)] bg-[var(--yt-card)] px-5 text-[var(--yt-foreground)] hover:bg-[var(--yt-card-strong)]"
-                >
-                  {isPickingFolder ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FolderOpen className="mr-2 h-4 w-4" />
-                  )}
-                  Browse
-                </Button>
+              <div className="mx-auto grid w-full max-w-xs grid-cols-2 rounded-full border border-[var(--yt-border)] bg-[var(--yt-card)] p-1 text-sm font-semibold">
+                {(["local", "download"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={isCreatingKnowledgeBase}
+                    onClick={() => {
+                      setKnowledgeBaseMode(mode);
+                      setKnowledgeBaseError("");
+                      setKnowledgeBaseResult("");
+                    }}
+                    className={`rounded-full px-4 py-2 capitalize transition ${
+                      knowledgeBaseMode === mode
+                        ? "bg-[var(--yt-button)] text-[var(--yt-button-text)] shadow-lg"
+                        : "text-[var(--yt-muted)] hover:text-[var(--yt-foreground)]"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {mode}
+                  </button>
+                ))}
               </div>
 
-              <div className="rounded-xl border border-[var(--yt-border)] bg-[var(--yt-card)] p-4 text-sm text-[var(--yt-muted)]">
-                {isCreatingKnowledgeBase ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating files, fetching transcripts, and checking comments...
-                  </span>
-                ) : isPickingFolder ? (
+              {knowledgeBaseMode === "local" ? (
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    value={outputDir}
+                    disabled={isCreatingKnowledgeBase || isPickingFolder}
+                    onChange={(event) => setOutputDir(event.target.value)}
+                    placeholder="No folder selected"
+                    className="h-11 rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] px-5 text-[var(--yt-foreground)]"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isCreatingKnowledgeBase || isPickingFolder}
+                    onClick={() => void handlePickOutputFolder()}
+                    className="h-11 rounded-full border-[var(--yt-border)] bg-[var(--yt-card)] px-5 text-[var(--yt-foreground)] hover:bg-[var(--yt-card-strong)]"
+                  >
+                    {isPickingFolder ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FolderOpen className="mr-2 h-4 w-4" />
+                    )}
+                    Browse
+                  </Button>
+                </div>
+              ) : null}
+
+              {isCreatingKnowledgeBase || knowledgeBaseResult ? (
+                <div className="grid gap-5 rounded-2xl border border-[var(--yt-border)] bg-[var(--yt-card)] p-5">
+                  <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)_96px] sm:items-center">
+                    <div className="h-24 w-full overflow-hidden rounded-xl bg-red-600/10 sm:w-40">
+                      {knowledgeBaseCurrentVideo?.thumbnail_url ? (
+                        <img
+                          src={knowledgeBaseCurrentVideo.thumbnail_url}
+                          alt={`${knowledgeBaseCurrentVideo.title} thumbnail`}
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-[var(--yt-muted)]">
+                          Context
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.16em] text-[var(--yt-subtle)]">
+                        {knowledgeBaseResult ? "Complete" : knowledgeBaseStage}
+                      </p>
+                      <p className="mt-2 line-clamp-3 text-base font-semibold leading-6">
+                        {knowledgeBaseCurrentVideo?.title ?? "Finalizing index"}
+                      </p>
+                      <p className="mt-2 text-xs text-[var(--yt-muted)]">
+                        {knowledgeBaseMode === "download"
+                          ? "Preparing zip package"
+                          : "Writing local context files"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-[var(--yt-card-strong)] px-4 py-3 text-center">
+                      <p className="text-2xl font-black tabular-nums">
+                        {knowledgeBaseProgressPercent}%
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--yt-muted)]">
+                        {knowledgeBaseCompleted}/{knowledgeBaseProgressTotal}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <div className="h-4 overflow-hidden rounded-full bg-[var(--yt-card-strong)]">
+                      <div
+                        className="h-full rounded-full transition-all duration-500 ease-out"
+                        style={knowledgeBaseProgressStyle}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-xs text-[var(--yt-muted)]">
+                      <span>{knowledgeBaseResult ? "Ready" : "Processing"}</span>
+                      <span className="truncate text-right">
+                        {knowledgeBaseResult ? knowledgeBaseResult : "Creating context files"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {knowledgeBaseSkipped.length > 0 ? (
+                    <div className="max-h-24 overflow-auto rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700">
+                      {knowledgeBaseSkipped.map((message) => (
+                        <p key={message}>{message}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : isPickingFolder ? (
+                <div className="rounded-xl border border-[var(--yt-border)] bg-[var(--yt-card)] p-4 text-sm text-[var(--yt-muted)]">
                   <span className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Waiting for folder selection...
                   </span>
-                ) : knowledgeBaseResult ? (
-                  <span className="text-emerald-600">{knowledgeBaseResult}</span>
-                ) : knowledgeBaseError ? (
-                  <span className="text-red-500">{knowledgeBaseError}</span>
-                ) : (
-                  <span>
-                    Selected videos: {selectedVideoIds.size}. Transcripts are pulled
-                    from YouTube captions when available. Existing matching files
-                    will be overwritten.
-                  </span>
-                )}
-              </div>
+                </div>
+              ) : knowledgeBaseError ? (
+                <div className="rounded-xl border border-red-500/25 bg-red-600/10 p-4 text-sm text-red-500">
+                  {knowledgeBaseError}
+                </div>
+              ) : null}
 
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isCreatingKnowledgeBase}
-                  onClick={() => setIsKnowledgeDialogOpen(false)}
-                  className="rounded-full px-5"
-                >
-                  Close
-                </Button>
                 <Button
                   type="submit"
                   disabled={
                     selectedVideoIds.size === 0 ||
-                    !outputDir.trim() ||
+                    (knowledgeBaseMode === "local" && !outputDir.trim()) ||
                     isCreatingKnowledgeBase ||
                     isPickingFolder ||
                     Boolean(knowledgeBaseResult)
@@ -799,6 +1084,8 @@ export function VideoSelectorPlaceholder() {
                 >
                   {isCreatingKnowledgeBase ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : knowledgeBaseMode === "download" ? (
+                    <Download className="mr-2 h-4 w-4" />
                   ) : (
                     <FolderOpen className="mr-2 h-4 w-4" />
                   )}
@@ -831,7 +1118,11 @@ export function VideoSelectorPlaceholder() {
             <span />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            ref={tableScrollRef}
+            onScroll={handleTableScroll}
+            className="min-h-0 flex-1 overflow-auto"
+          >
             {isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-[var(--yt-muted)]">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -846,6 +1137,7 @@ export function VideoSelectorPlaceholder() {
                 {displayedVideos.map((video) => (
                   <div
                     key={video.video_id}
+                    data-cursor-light
                     className="grid grid-cols-[48px_minmax(360px,1.6fr)_112px_130px_130px_100px_72px] items-center border-b border-[var(--yt-border)] px-4 py-3 text-sm last:border-b-0 hover:bg-[var(--yt-card-strong)]"
                   >
                     <Checkbox
@@ -917,6 +1209,52 @@ export function VideoSelectorPlaceholder() {
           </div>
         </div>
       </section>
+
+      {typeof document !== "undefined" &&
+      isTopicMode &&
+      isExpandSearchVisible &&
+      topicLimit < MAX_TOPIC_LIMIT &&
+      rankedVideos.length > 0
+        ? createPortal(
+            <div className="fixed inset-x-4 bottom-7 z-50 flex justify-center pointer-events-none">
+              <form
+                onSubmit={handleExpandTopicSearch}
+                className="pointer-events-auto flex w-full max-w-xl animate-in fade-in slide-in-from-bottom-2 flex-col gap-3 rounded-2xl border border-[var(--yt-border)] bg-[var(--yt-page)]/92 p-4 text-[var(--yt-foreground)] shadow-2xl shadow-black/20 backdrop-blur-2xl duration-200 sm:flex-row sm:items-center"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Search for more</p>
+                  <p className="mt-1 text-xs text-[var(--yt-muted)]">
+                    Current {topicLimit}. New max:
+                  </p>
+                </div>
+
+                <Input
+                  type="number"
+                  min={topicLimit + 1}
+                  max={MAX_TOPIC_LIMIT}
+                  value={expandedTopicLimit}
+                  onChange={(event) => setExpandedTopicLimit(event.target.value)}
+                  className="h-10 w-full rounded-full border-[var(--yt-border)] bg-[var(--yt-input)] text-center text-[var(--yt-foreground)] sm:w-24"
+                />
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setIsExpandSearchVisible(false)}
+                    className="h-10 rounded-full px-4"
+                  >
+                    Later
+                  </Button>
+                  <Button type="submit" className="h-10 rounded-full px-5">
+                    Search broader
+                  </Button>
+                </div>
+              </form>
+            </div>,
+            document.body
+          )
+        : null}
     </main>
   );
 }
