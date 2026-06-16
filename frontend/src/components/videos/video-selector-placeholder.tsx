@@ -55,6 +55,11 @@ const KNOWLEDGE_BASE_STAGES = [
 
 type KnowledgeBaseMode = "local" | "download";
 
+const SUPPORTS_LOCAL_KNOWLEDGE_BASE = process.env.NODE_ENV !== "production";
+const KNOWLEDGE_BASE_MODES: KnowledgeBaseMode[] = SUPPORTS_LOCAL_KNOWLEDGE_BASE
+  ? ["local", "download"]
+  : ["download"];
+
 function formatNumber(value: number | null): string {
   return value === null ? "-" : value.toLocaleString("en-US");
 }
@@ -148,8 +153,9 @@ export function VideoSelectorPlaceholder() {
   );
   const [query, setQuery] = useState("");
   const [outputDir, setOutputDir] = useState("");
-  const [knowledgeBaseMode, setKnowledgeBaseMode] =
-    useState<KnowledgeBaseMode>("local");
+  const [knowledgeBaseMode, setKnowledgeBaseMode] = useState<KnowledgeBaseMode>(
+    SUPPORTS_LOCAL_KNOWLEDGE_BASE ? "local" : "download"
+  );
   const [filePerVideo, setFilePerVideo] = useState(false);
   const [isKnowledgeDialogOpen, setIsKnowledgeDialogOpen] = useState(false);
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false);
@@ -719,10 +725,15 @@ export function VideoSelectorPlaceholder() {
   }
 
   async function handleCreateKnowledgeBase() {
+    const resolvedKnowledgeBaseMode =
+      SUPPORTS_LOCAL_KNOWLEDGE_BASE || knowledgeBaseMode === "download"
+        ? knowledgeBaseMode
+        : "download";
+
     if (
       (!channel && !isTopicMode) ||
       selectedVideoIds.size === 0 ||
-      (knowledgeBaseMode === "local" && !outputDir.trim())
+      (resolvedKnowledgeBaseMode === "local" && !outputDir.trim())
     ) {
       return;
     }
@@ -749,8 +760,8 @@ export function VideoSelectorPlaceholder() {
       const response = await streamKnowledgeBaseCreation({
         channelName: isTopicMode ? topicTitle : channel!.name,
         channelUrl: isTopicMode ? topicUrl : channel!.url,
-        outputDir: knowledgeBaseMode === "local" ? outputDir.trim() : "",
-        mode: knowledgeBaseMode,
+        outputDir: resolvedKnowledgeBaseMode === "local" ? outputDir.trim() : "",
+        mode: resolvedKnowledgeBaseMode,
         videos: selectedVideos,
         includeComments: true,
         filePerVideo,
@@ -785,12 +796,12 @@ export function VideoSelectorPlaceholder() {
       });
 
       setKnowledgeBaseResult(
-        knowledgeBaseMode === "download"
+        resolvedKnowledgeBaseMode === "download"
           ? `Created ${response.count} ${response.count === 1 ? "file" : "files"}. Download ready.`
           : `Created ${response.count} ${response.count === 1 ? "file" : "files"} in ${response.output_path}`
       );
 
-      if (knowledgeBaseMode === "download") {
+      if (resolvedKnowledgeBaseMode === "download") {
         downloadKnowledgeBasePackage(response);
       }
     } catch (error) {
@@ -805,6 +816,12 @@ export function VideoSelectorPlaceholder() {
   }
 
   async function handlePickOutputFolder() {
+    if (!SUPPORTS_LOCAL_KNOWLEDGE_BASE) {
+      setKnowledgeBaseMode("download");
+      setKnowledgeBaseError("");
+      return;
+    }
+
     setIsPickingFolder(true);
     setKnowledgeBaseError("");
     setKnowledgeBaseResult("");
@@ -1031,8 +1048,12 @@ export function VideoSelectorPlaceholder() {
                 void handleCreateKnowledgeBase();
               }}
             >
-              <div className="mx-auto grid w-full max-w-xs grid-cols-2 rounded-full border border-[var(--yt-border)] bg-[var(--yt-card)] p-1 text-sm font-semibold">
-                {(["local", "download"] as const).map((mode) => (
+              <div
+                className={`mx-auto grid w-full max-w-xs rounded-full border border-[var(--yt-border)] bg-[var(--yt-card)] p-1 text-sm font-semibold ${
+                  KNOWLEDGE_BASE_MODES.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                }`}
+              >
+                {KNOWLEDGE_BASE_MODES.map((mode) => (
                   <button
                     key={mode}
                     type="button"
