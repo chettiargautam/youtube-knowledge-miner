@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   description:
     "Turn any YouTube channel into a searchable topic-specific knowledge base.",
   icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
 };
 
