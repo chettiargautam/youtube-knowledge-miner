@@ -1,20 +1,69 @@
 # YouTube Knowledge Miner
 
-Turn a YouTube channel into a clean, local knowledge base you can use with the AI tools you already trust.
+<p align="center">
+  <strong>Turn YouTube channels, topics, videos, and Shorts into clean AI-ready knowledge bases.</strong>
+</p>
 
-YouTube Knowledge Miner helps you find the right channel or start from a topic, search through relevant videos, select the videos that matter, and export them into a structured folder of Markdown files. Each file includes video metadata, description, transcript when available, and optional comments, so tools like Claude, Codex, Copilot, Cursor, or any local agent can ground answers in the source material.
+<p align="center">
+  Mine useful YouTube source material into local Markdown context files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval workflow.
+</p>
 
-No hosted backend. No bundled LLM. No vendor lock-in. The app focuses on the part that needs to be reliable: mining useful YouTube source material into files you control.
+<p align="center">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-111111">
+  <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI-009688">
+  <img alt="Frontend" src="https://img.shields.io/badge/frontend-Next.js-000000">
+  <img alt="Output" src="https://img.shields.io/badge/output-Markdown-444444">
+</p>
+
+## What It Does
+
+YouTube Knowledge Miner helps you find the right videos, select the ones that matter, and export them into a portable research corpus.
+
+Start from:
+
+- A YouTube channel name, handle, or URL
+- A broad research topic
+- Regular YouTube videos
+- YouTube Shorts, when returned by search or channel Shorts URLs
+
+Then:
+
+- Search and rank videos by relevance
+- Auto-select strong matches using keyword confidence
+- Keep or change selections across pagination
+- Export selected videos as one combined context file or one file per video
+- Save locally or download a ready-to-use zip package
+
+No hosted backend. No bundled LLM. No vendor lock-in. The app focuses on one thing: turning YouTube source material into files you control.
 
 ## Why This Exists
 
-Long-form YouTube channels can contain hundreds or thousands of hours of useful knowledge, but the material is hard to search, cite, or reuse. This project converts selected videos into a folder that behaves like a research corpus:
+Long-form channels and topic searches can contain hundreds of hours of useful knowledge, but the material is hard to search, cite, compare, or reuse inside AI tools.
 
-- Find a channel by name, handle, or URL, or search directly by topic.
-- Browse and search videos without loading an entire channel into memory.
-- Select the videos worth keeping.
-- Export one Markdown file per video plus an `index.json`.
-- Use the generated folder with your preferred AI assistant, editor, or retrieval workflow.
+This project converts selected videos into grounded Markdown context:
+
+- Metadata
+- Descriptions
+- Transcripts when available
+- Comments when requested and available
+- Channel/source context
+- An `index.json` manifest
+
+The resulting folder behaves like a research corpus you can open, attach, search, summarize, cite, or feed into your own RAG pipeline.
+
+## Highlights
+
+| Area | What You Get |
+| --- | --- |
+| Channel discovery | Resolve channels by URL, handle, or name, then choose the correct result. |
+| Topic mining | Search YouTube by topic and choose how many results to examine. |
+| Ranking | Videos are scored by title, description, tags, and query coverage. |
+| Selection | Auto-selected strong matches, manual toggles, select current page, select all ranked results, and unselect all. |
+| Pagination | Selection state persists across pages and export uses only the videos currently selected. |
+| Export modes | Local folder export or downloadable zip package. |
+| File structure | One combined context file by default, or optional file per video. |
+| Progress UI | Live export progress with current thumbnail, title, count, and red-to-green progress bar. |
+| Theme | Automatically follows the browser/system light or dark theme. |
 
 ## Quick Start
 
@@ -36,84 +85,136 @@ If your system exposes Python as `python3`:
 python3 setup_and_run.py
 ```
 
-The script performs the full local setup:
+The script handles setup and starts both services:
 
-- Creates `backend/.env` from `backend/.env.example` when needed.
-- Creates a Python virtual environment in `backend/.venv`.
-- Installs backend dependencies from `backend/requirements.txt`.
-- Installs frontend dependencies from `frontend/package-lock.json`.
-- Starts the backend at `http://127.0.0.1:8000`.
-- Starts the frontend at `http://127.0.0.1:3000`.
+- Creates `backend/.env` from `backend/.env.example` when needed
+- Creates `backend/.venv`
+- Installs backend dependencies
+- Installs frontend dependencies
+- Starts the backend at `http://127.0.0.1:8000`
+- Starts the frontend at `http://127.0.0.1:3000`
 
-Open `http://127.0.0.1:3000` and start mining.
+Open:
 
-## How It Works
+```text
+http://127.0.0.1:3000
+```
 
-The app has three screens:
+## Product Flow
 
-1. **Home**
+### 1. Choose A Starting Point
 
-   Choose how you want to start.
+On the home screen, choose:
 
-   - **Channel**: type a channel name, handle, or full channel URL.
-   - **Topic**: type the subject you want to research and choose how many YouTube results to review, up to 100.
+- **Channel**: paste a channel URL or type an exact channel name or handle.
+- **Topic**: enter a research topic and choose the number of YouTube results to inspect.
 
-2. **Channel Results**
+### 2. Pick The Right Channel
 
-   When starting from a channel name, review matching channels, compare metadata, and choose the correct one.
+If the channel search returns multiple matches, compare:
 
-   The channel result cards show the channel name, description, subscriber count when available, verification state when available, and a link back to YouTube for manual checking.
+- Channel name
+- Handle
+- Subscriber count
+- Description
+- Verification state
+- YouTube link
 
-3. **Video Selector**
+Then continue to video selection.
 
-   Search and page through videos, select the videos you want, and create a knowledge base.
+### 3. Search, Rank, And Select Videos
 
-   - For channel mode, browse or search within the selected channel.
-   - For topic mode, review YouTube results for the topic query.
-   - Review title, thumbnail, upload date, views, and relevance score.
-   - Select individual videos or select all visible videos on the current page.
-   - Choose an output folder from your system file picker.
-   - Create the knowledge base locally.
+In the video selector:
 
-## Knowledge Base Output
+- Browse channel videos page by page
+- Search within a selected channel
+- Search and rerank topic results
+- Refresh without losing the active search query
+- Select visible rows, all ranked results, or clear all selections
 
-When you create a knowledge base, the backend creates a folder named after the channel inside your chosen output directory.
+Auto-selection is intentionally helpful, not final. You can always override it before export.
 
-The output includes:
+### 4. Create The Knowledge Base
 
-- `index.json` with channel-level metadata and file references.
-- One Markdown file per selected video.
+Choose an export destination:
 
-Each Markdown file is written for downstream AI grounding. It starts with a short context note explaining that the file contains extracted YouTube video information, followed by:
+- **Local**: choose a folder and write files directly to your machine.
+- **Download**: create a zip package and download it.
+
+Choose file structure:
+
+- **Combined context**: one Markdown file containing all selected videos. This is the default.
+- **File per video**: one Markdown file per selected video.
+
+During export, the modal locks until the job finishes. It shows:
+
+- Current video thumbnail
+- Current video title
+- Completed count
+- Progress bar
+- Rotating extraction stage
+- Skipped-video warnings if a video fails
+
+## Output
+
+When export finishes, the generated folder contains:
+
+```text
+your-output-folder/
+└── Channel Or Topic Name/
+    ├── index.json
+    └── combined-context.md
+```
+
+If **File per video** is enabled:
+
+```text
+your-output-folder/
+└── Channel Or Topic Name/
+    ├── index.json
+    ├── 001 - First Video.md
+    ├── 002 - Second Video.md
+    └── 003 - Third Video.md
+```
+
+Each Markdown file is written for downstream AI grounding. It includes:
 
 - Channel name and URL
 - Video title and URL
 - Video ID
 - Upload date
 - Duration
-- View count
-- Like count
-- Comment count when available
-- Full description when available
-- Transcript when YouTube captions are available
+- Views, likes, and comments when available
+- Description
+- Transcript when captions are available
 - Comments when requested and available
 
 Existing matching files are overwritten, so rerunning an export refreshes the knowledge base instead of creating duplicate clutter.
 
-## Using the Knowledge Base with AI Tools
+## Using The Output With AI Tools
 
 This project intentionally stops at file creation. It does not ship a local LLM, prompt router, vector database, or chat UI.
-
-That is by design: once the Markdown knowledge base exists, you can use it with whichever tool gives you the best answers.
 
 Good next steps:
 
 - Open the generated folder in VS Code and ask Copilot about the files.
 - Open the folder with Codex and ask it to inspect, summarize, compare, or cite the video notes.
-- Upload or attach the folder/files to Claude, ChatGPT, or another assistant that supports file context.
-- Build your own RAG workflow on top of the generated Markdown and `index.json`.
+- Attach the generated Markdown files to Claude, ChatGPT, or another file-aware assistant.
+- Build your own retrieval workflow on top of the Markdown files and `index.json`.
 
-The exported files include explicit context framing so an AI assistant can treat them as source material from videos, not as user instructions.
+The exported files include explicit source framing so an AI assistant can treat them as source material from videos, not as user instructions.
+
+## Shorts Support
+
+The app treats Shorts as YouTube videos and can export them when they appear in results.
+
+Supported paths:
+
+- Topic searches that return Shorts
+- Direct video metadata for short videos
+- Channel Shorts URLs such as `https://www.youtube.com/@channel/shorts`
+
+Regular channel URLs are normalized to the channel `/videos` tab. If you specifically want Shorts from a channel, use that channel's `/shorts` URL or search by topic.
 
 ## Running Services Manually
 
@@ -175,17 +276,17 @@ You usually do not need to change these for local use.
 
 ```text
 .
-├── backend/              # FastAPI API, YouTube metadata, transcripts, export logic
-│   ├── app/api/          # HTTP routes
-│   ├── app/services/     # Channel/video fetching, ranking, folder picking, KB creation
-│   ├── app/schemas/      # Request/response models
+├── backend/
+│   ├── app/api/          # FastAPI routes
+│   ├── app/services/     # YouTube fetching, ranking, export, folder picker
+│   ├── app/schemas/      # Request and response models
 │   └── requirements.txt
-├── frontend/             # Next.js UI
-│   ├── src/app/          # App routes
+├── frontend/
+│   ├── src/app/          # Next.js app routes and global styles
 │   ├── src/components/   # Channel search, video selector, UI primitives
 │   ├── src/lib/          # API client and local selection store
 │   └── package.json
-├── setup_and_run.py      # Cross-platform one-shot setup and local runner
+├── setup_and_run.py      # Cross-platform setup and local runner
 └── README.md
 ```
 
@@ -211,6 +312,10 @@ The app uses captions available through YouTube transcript access. Some videos d
 
 The folder picker uses local desktop dialogs from the backend process. Make sure the backend is running on your local machine, not a headless remote shell.
 
+**The browser tab icon does not refresh**
+
+Browsers cache favicons aggressively. Hard refresh the page or clear site data if you recently changed the app icon.
+
 ## Development
 
 Useful checks:
@@ -226,10 +331,10 @@ cd frontend && npm run build
 
 YouTube Knowledge Miner builds on excellent open-source tools:
 
-- [FastAPI](https://fastapi.tiangolo.com/) for the local backend.
-- [Next.js](https://nextjs.org/) and [React](https://react.dev/) for the frontend.
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube metadata extraction.
-- [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) for transcript retrieval.
-- [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) for fast relevance scoring.
+- [FastAPI](https://fastapi.tiangolo.com/) for the local backend
+- [Next.js](https://nextjs.org/) and [React](https://react.dev/) for the frontend
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube metadata extraction
+- [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) for transcript retrieval
+- [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) for fast relevance scoring
 
-The project is designed to create clean, portable source material that you can bring into the AI assistant or research workflow of your choice.
+Built for people who want AI answers grounded in source material they actually control.

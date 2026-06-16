@@ -26,6 +26,12 @@ class VideoMetadata(BaseModel):
     channel_url: str | None = None
     tags: list[str] = []
     availability: str | None = None
+    is_short: bool = False
+
+    def model_post_init(self, __context):
+        # YouTube Shorts are typically ≤ 60 seconds
+        if self.duration_seconds is not None:
+            self.is_short = self.duration_seconds <= 60
 
 
 class VideoPageResponse(BaseModel):
@@ -99,6 +105,7 @@ class KnowledgeBaseCreateRequest(BaseModel):
     videos: list[KnowledgeBaseVideoInput] = Field(..., min_length=1)
     include_comments: bool = True
     max_comments: int = Field(default=50, ge=0, le=500)
+    file_per_video: bool = False
     download_transcribe_if_missing: bool = False
 
 

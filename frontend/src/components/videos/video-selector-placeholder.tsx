@@ -150,6 +150,7 @@ export function VideoSelectorPlaceholder() {
   const [outputDir, setOutputDir] = useState("");
   const [knowledgeBaseMode, setKnowledgeBaseMode] =
     useState<KnowledgeBaseMode>("local");
+  const [filePerVideo, setFilePerVideo] = useState(false);
   const [isKnowledgeDialogOpen, setIsKnowledgeDialogOpen] = useState(false);
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
@@ -513,6 +514,10 @@ export function VideoSelectorPlaceholder() {
     visibleVideoIds.length > 0 && selectedVisibleCount === visibleVideoIds.length;
   const areSomeVisibleSelected =
     selectedVisibleCount > 0 && selectedVisibleCount < visibleVideoIds.length;
+  const bulkSelectLabel = isSearchMode ? "Select All Results" : "Select Current Page";
+  const selectedScopeText = isSearchMode
+    ? `${selectedVideoIds.size} / ${visibleCount} selected`
+    : `${selectedVideoIds.size} selected across pages`;
   const knowledgeBaseProgressTotal =
     knowledgeBaseTotal || selectedVideosById.size || selectedVideoIds.size;
   const knowledgeBaseProgressPercent =
@@ -581,6 +586,25 @@ export function VideoSelectorPlaceholder() {
 
       return next;
     });
+  }
+
+  function selectAllVideos() {
+    const allVideos = isSearchMode ? rankedVideos : videos;
+    setSelectedVideoIds((current) => {
+      const next = new Set(current);
+      allVideos.forEach((video) => next.add(video.video_id));
+      return next;
+    });
+    setSelectedVideosById((current) => {
+      const next = new Map(current);
+      allVideos.forEach((video) => next.set(video.video_id, video));
+      return next;
+    });
+  }
+
+  function unselectAllVideos() {
+    setSelectedVideoIds(new Set());
+    setSelectedVideosById(new Map());
   }
 
   function updateVisiblePage(nextPage: number) {
@@ -729,6 +753,7 @@ export function VideoSelectorPlaceholder() {
         mode: knowledgeBaseMode,
         videos: selectedVideos,
         includeComments: true,
+        filePerVideo,
         onEvent: (event: KnowledgeBaseProgressEvent) => {
           if (event.type === "start") {
             setKnowledgeBaseTotal(event.total);
@@ -761,8 +786,8 @@ export function VideoSelectorPlaceholder() {
 
       setKnowledgeBaseResult(
         knowledgeBaseMode === "download"
-          ? `Created ${response.count} files. Download ready.`
-          : `Created ${response.count} files in ${response.output_path}`
+          ? `Created ${response.count} ${response.count === 1 ? "file" : "files"}. Download ready.`
+          : `Created ${response.count} ${response.count === 1 ? "file" : "files"} in ${response.output_path}`
       );
 
       if (knowledgeBaseMode === "download") {
@@ -866,7 +891,11 @@ export function VideoSelectorPlaceholder() {
 
           <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
               <span className="rounded-full bg-[var(--yt-card)] px-3 py-2 text-xs font-medium text-[var(--yt-foreground)]">
-                Selected: {selectedVideoIds.size}
+                {selectedVideoIds.size === 0
+                  ? "No videos selected"
+                  : selectedVideoIds.size === 1
+                  ? "1 video selected"
+                  : `${selectedVideoIds.size} videos selected`}
               </span>
               <Button
                 type="button"
@@ -968,7 +997,16 @@ export function VideoSelectorPlaceholder() {
           />
         </div>
 
-        <Dialog open={isKnowledgeDialogOpen} onOpenChange={setIsKnowledgeDialogOpen}>
+        <Dialog
+          open={isKnowledgeDialogOpen}
+          onOpenChange={(open) => {
+            if (isCreatingKnowledgeBase && !open) {
+              return;
+            }
+
+            setIsKnowledgeDialogOpen(open);
+          }}
+        >
           <DialogContent
             showCloseButton={!isCreatingKnowledgeBase}
             className={`bg-[var(--yt-page)] text-[var(--yt-foreground)] transition-all duration-300 ${
@@ -1014,6 +1052,25 @@ export function VideoSelectorPlaceholder() {
                   </button>
                 ))}
               </div>
+
+              {selectedVideoIds.size > 1 ? (
+                <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-[var(--yt-border)] bg-[var(--yt-card)] px-4 py-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-[var(--yt-foreground)]">
+                      File per video
+                    </span>
+                    <span className="mt-0.5 block text-xs text-[var(--yt-muted)]">
+                      Off creates one combined context file.
+                    </span>
+                  </span>
+                  <Checkbox
+                    checked={filePerVideo}
+                    disabled={isCreatingKnowledgeBase}
+                    onCheckedChange={(checked) => setFilePerVideo(checked === true)}
+                    aria-label="Create one file per video"
+                  />
+                </label>
+              ) : null}
 
               {knowledgeBaseMode === "local" ? (
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -1146,25 +1203,54 @@ export function VideoSelectorPlaceholder() {
         </Dialog>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--yt-border)] bg-[var(--yt-card)] backdrop-blur-xl">
-          <div className="grid shrink-0 grid-cols-[48px_minmax(360px,1.6fr)_112px_130px_130px_100px_72px] items-center border-b border-[var(--yt-border)] bg-[var(--yt-card-strong)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--yt-subtle)]">
-            <Checkbox
-              checked={
-                areAllVisibleSelected
-                  ? true
-                  : areSomeVisibleSelected
-                  ? "indeterminate"
-                  : false
-              }
-              disabled={displayedVideos.length === 0}
-              onCheckedChange={toggleVisibleVideos}
-              aria-label="Select all visible videos"
-            />
-            <span>Video</span>
-            <span>Confidence</span>
-            <span>Upload date</span>
-            <span>Views</span>
-            <span>Duration</span>
-            <span />
+          <div className="shrink-0 border-b border-[var(--yt-border)] bg-[var(--yt-card-strong)]">
+            <div className="grid grid-cols-[48px_minmax(360px,1.6fr)_112px_130px_130px_100px_72px] items-center px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--yt-subtle)] border-b border-[var(--yt-border)]">
+              <Checkbox
+                checked={
+                  areAllVisibleSelected
+                    ? true
+                    : areSomeVisibleSelected
+                    ? "indeterminate"
+                    : false
+                }
+                disabled={displayedVideos.length === 0}
+                onCheckedChange={toggleVisibleVideos}
+                aria-label="Select all visible videos"
+              />
+              <span>Video</span>
+              <span>Confidence</span>
+              <span>Upload date</span>
+              <span>Views</span>
+              <span>Duration</span>
+              <span />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-[var(--yt-border)] text-xs text-[var(--yt-muted)] bg-[var(--yt-card)]/50">
+              <span className="font-medium">Bulk actions:</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={visibleCount === 0 || isBusy}
+                onClick={selectAllVideos}
+                className="h-8 rounded-full px-3 text-xs hover:bg-red-600/10 hover:text-red-500"
+              >
+                {bulkSelectLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={selectedVideoIds.size === 0 || isBusy}
+                onClick={unselectAllVideos}
+                className="h-8 rounded-full px-3 text-xs hover:bg-red-600/10 hover:text-red-500"
+              >
+                Unselect All
+              </Button>
+              <span className="ml-auto text-[var(--yt-foreground)] font-semibold">
+                {selectedScopeText}
+              </span>
+            </div>
           </div>
 
           <div
@@ -1195,7 +1281,7 @@ export function VideoSelectorPlaceholder() {
                     />
 
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-red-600/10">
+                      <div className="h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-red-600/10 relative group">
                         {video.thumbnail_url ? (
                           <img
                             src={video.thumbnail_url}
@@ -1204,11 +1290,27 @@ export function VideoSelectorPlaceholder() {
                             referrerPolicy="no-referrer"
                           />
                         ) : null}
+                        {video.is_short ? (
+                          <div className="absolute inset-0 flex items-end justify-center pb-1 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-black/80 px-2 py-0.5 text-xs font-bold text-white">
+                              <span className="h-1.5 w-1.5 bg-red-500 rounded-full" />
+                              Shorts
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="min-w-0">
-                        <p className="line-clamp-2 font-medium leading-5">
-                          {video.title}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="line-clamp-2 font-medium leading-5">
+                            {video.title}
+                          </p>
+                          {video.is_short ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-600">
+                              <span className="h-1.5 w-1.5 bg-amber-500 rounded-full" />
+                              Shorts
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="mt-1 line-clamp-1 text-xs text-[var(--yt-muted)]">
                           {isRankedVideo(video)
                             ? video.rank_reason

@@ -32,6 +32,35 @@ def _video_url(video_id_or_url: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id_or_url}"
 
 
+def _looks_like_short(info: dict, url: str | None = None) -> bool:
+    duration = info.get("duration")
+
+    if isinstance(duration, int) and duration <= 60:
+        return True
+
+    text_values = [
+        str(url or ""),
+        str(info.get("url") or ""),
+        str(info.get("webpage_url") or ""),
+        str(info.get("original_url") or ""),
+    ]
+
+    if any("/shorts/" in value for value in text_values):
+        return True
+
+    thumbnails = info.get("thumbnails")
+    if isinstance(thumbnails, list):
+        return any(
+            isinstance(thumbnail, dict)
+            and isinstance(thumbnail.get("url"), str)
+            and "/oar" in thumbnail["url"]
+            for thumbnail in thumbnails
+        )
+
+    thumbnail = info.get("thumbnail")
+    return isinstance(thumbnail, str) and "/oar" in thumbnail
+
+
 def _metadata_from_info(info: dict) -> VideoMetadata | None:
     video_id = info.get("id")
     if not video_id:
@@ -56,6 +85,7 @@ def _metadata_from_info(info: dict) -> VideoMetadata | None:
         channel_url=info.get("channel_url") or info.get("uploader_url"),
         tags=info.get("tags") or [],
         availability=info.get("availability"),
+        is_short=_looks_like_short(info, info.get("webpage_url")),
     )
 
 
@@ -88,6 +118,7 @@ def _flat_video_from_entry(entry: dict) -> VideoMetadata | None:
         channel_url=entry.get("channel_url") or entry.get("uploader_url"),
         tags=entry.get("tags") or [],
         availability=entry.get("availability"),
+        is_short=_looks_like_short(entry, url),
     )
 
 

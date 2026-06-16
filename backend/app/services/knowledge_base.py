@@ -158,6 +158,7 @@ def create_knowledge_base_events(
     results: list[KnowledgeBaseFileResult] = []
     warnings: list[str] = []
     index_items: list[dict] = []
+    combined_sections: list[tuple[VideoMetadata, str, str, int]] = []
 
     if request.download_transcribe_if_missing:
         warnings.append(
@@ -207,22 +208,28 @@ def create_knowledge_base_events(
                 request.max_comments if request.include_comments else 0,
             )
 
-            filename = f"{index:03d} - {_safe_filename(metadata.title, metadata.video_id)}.md"
-            file_path = channel_dir / filename
-            if file_path.exists():
-                file_path.unlink()
-
-            file_path.write_text(
-                _markdown_for_video(
-                    channel_name=request.channel_name,
-                    channel_url=request.channel_url,
-                    metadata=metadata,
-                    transcript=transcript,
-                    transcript_status=transcript_status,
-                    comments=comments,
-                ),
-                encoding="utf-8",
+            markdown = _markdown_for_video(
+                channel_name=request.channel_name,
+                channel_url=request.channel_url,
+                metadata=metadata,
+                transcript=transcript,
+                transcript_status=transcript_status,
+                comments=comments,
             )
+            combined_sections.append((metadata, markdown, transcript_status, len(comments)))
+
+            filename = (
+                f"{index:03d} - {_safe_filename(metadata.title, metadata.video_id)}.md"
+                if request.file_per_video
+                else "combined-context.md"
+            )
+            file_path = channel_dir / filename
+
+            if request.file_per_video:
+                if file_path.exists():
+                    file_path.unlink()
+
+                file_path.write_text(markdown, encoding="utf-8")
 
             file_result = KnowledgeBaseFileResult(
                 video_id=metadata.video_id,
@@ -268,6 +275,42 @@ def create_knowledge_base_events(
                 "message": warning,
             }
             continue
+
+    if not request.file_per_video and combined_sections:
+        combined_path = channel_dir / "combined-context.md"
+        if combined_path.exists():
+            combined_path.unlink()
+
+        combined_body = [
+            f"# {request.channel_name} Knowledge Base",
+            "",
+            "## Knowledge Base Context",
+            "",
+            "This file combines extracted information from the selected YouTube videos for use as grounded knowledge base context.",
+            "",
+            f"- Channel: {request.channel_name}",
+            f"- URL: {request.channel_url}",
+            f"- Videos: {len(combined_sections)}",
+            "",
+        ]
+        for index, (_metadata, markdown, _transcript_status, _comments_count) in enumerate(
+            combined_sections,
+            start=1,
+        ):
+            combined_body.append(f"\n---\n\n## Source Video {index}\n")
+            combined_body.append(markdown)
+
+        combined_path.write_text("\n".join(combined_body), encoding="utf-8")
+
+        results = [
+            KnowledgeBaseFileResult(
+                video_id="combined",
+                title=f"{request.channel_name} combined context",
+                file_path=str(combined_path),
+                transcript_status="combined",
+                comments_count=sum(item[3] for item in combined_sections),
+            )
+        ]
 
     index_path = channel_dir / "index.json"
     if index_path.exists():

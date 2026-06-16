@@ -15,6 +15,7 @@ export type VideoMetadata = {
   channel_url: string | null;
   tags: string[];
   availability: string | null;
+  is_short: boolean;
 };
 
 export type VideoPageResponse = {

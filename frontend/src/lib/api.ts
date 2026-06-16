@@ -339,12 +339,14 @@ export async function createKnowledgeBase({
   outputDir,
   videos,
   includeComments = true,
+  filePerVideo = false,
 }: {
   channelName: string;
   channelUrl: string;
   outputDir: string;
   videos: VideoMetadata[];
   includeComments?: boolean;
+  filePerVideo?: boolean;
 }): Promise<KnowledgeBaseCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/api/videos/knowledge-base`, {
     method: "POST",
@@ -357,6 +359,7 @@ export async function createKnowledgeBase({
       output_dir: outputDir,
       include_comments: includeComments,
       max_comments: 50,
+      file_per_video: filePerVideo,
       videos: videos.map((video) => ({
         video_id: video.video_id,
         url: video.url,
@@ -393,6 +396,7 @@ export async function streamKnowledgeBaseCreation({
   mode = "local",
   videos,
   includeComments = true,
+  filePerVideo = false,
   onEvent,
 }: {
   channelName: string;
@@ -401,6 +405,7 @@ export async function streamKnowledgeBaseCreation({
   mode?: "local" | "download";
   videos: VideoMetadata[];
   includeComments?: boolean;
+  filePerVideo?: boolean;
   onEvent: (event: KnowledgeBaseProgressEvent) => void;
 }): Promise<KnowledgeBaseCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/api/videos/knowledge-base/stream?mode=${mode}`, {
@@ -414,6 +419,7 @@ export async function streamKnowledgeBaseCreation({
       output_dir: outputDir,
       include_comments: includeComments,
       max_comments: 50,
+      file_per_video: filePerVideo,
       videos: videos.map((video) => ({
         video_id: video.video_id,
         url: video.url,
