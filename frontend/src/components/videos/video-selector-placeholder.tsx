@@ -156,7 +156,7 @@ export function VideoSelectorPlaceholder() {
   const [knowledgeBaseMode, setKnowledgeBaseMode] = useState<KnowledgeBaseMode>(
     SUPPORTS_LOCAL_KNOWLEDGE_BASE ? "local" : "download"
   );
-  const [filePerVideo, setFilePerVideo] = useState(false);
+  const [filePerVideo, setFilePerVideo] = useState(true);
   const [isKnowledgeDialogOpen, setIsKnowledgeDialogOpen] = useState(false);
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
