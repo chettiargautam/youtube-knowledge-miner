@@ -889,12 +889,7 @@ export function VideoSelectorPlaceholder() {
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <img
-                    src="/logo.png"
-                    alt=""
-                    className="h-6 w-6 object-contain"
-                    draggable={false}
-                  />
+                  isTopicMode ? "YT" : channel?.avatarUrl
                 )}
               </div>
 

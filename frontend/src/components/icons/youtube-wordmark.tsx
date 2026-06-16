@@ -1,17 +1,18 @@
-import type { ImgHTMLAttributes } from "react";
+import type { SVGProps } from "react";
 
-type YouTubePlayLogoProps = ImgHTMLAttributes<HTMLImageElement>;
+type YouTubePlayLogoProps = SVGProps<SVGSVGElement>;
 
 export function YouTubePlayLogo({ className, ...props }: YouTubePlayLogoProps) {
   return (
-    <img
-      src="/logo.png"
-      alt=""
+    <svg
+      viewBox="0 0 28 20"
       aria-hidden="true"
       className={className}
-      draggable={false}
       {...props}
-    />
+    >
+      <rect width="28" height="20" rx="5" className="fill-red-600" />
+      <path d="M11.15 5.85v8.3L18.55 10l-7.4-4.15Z" className="fill-white" />
+    </svg>
   );
 }
 

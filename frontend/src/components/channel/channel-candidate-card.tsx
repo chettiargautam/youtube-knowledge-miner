@@ -72,12 +72,7 @@ export function ChannelCandidateCard({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <img
-              src="/logo.png"
-              alt=""
-              className="h-9 w-9 object-contain"
-              draggable={false}
-            />
+            channel.avatarUrl
           )}
         </div>
 
