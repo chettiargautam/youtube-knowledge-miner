@@ -483,9 +483,10 @@ export function downloadKnowledgeBasePackage(result: KnowledgeBaseCreateResponse
   const link = document.createElement("a");
   link.href = `${API_BASE_URL}${result.download_url}`;
   link.download = result.download_filename ?? "youtube-knowledge-base.zip";
+  link.target = "_self";
   document.body.appendChild(link);
   link.click();
-  link.remove();
+  window.setTimeout(() => link.remove(), 1000);
 }
 
 export async function pickKnowledgeBaseFolder(): Promise<FolderPickResponse> {

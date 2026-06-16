@@ -172,6 +172,7 @@ export function VideoSelectorPlaceholder() {
   const [expandedTopicLimit, setExpandedTopicLimit] = useState(
     Math.min(MAX_TOPIC_LIMIT, DEFAULT_TOPIC_LIMIT + 25).toString()
   );
+  const restoredChannelSearchRef = useRef("");
   const isTopicMode = topic.trim().length > 0;
   const topicTitle = titleFromTopic(topic);
   const topicUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
@@ -502,7 +503,9 @@ export function VideoSelectorPlaceholder() {
       : `Results ${firstResult}-${lastResult} of ${totalCount.toLocaleString("en-US")}`;
   const channelVideoCountText =
     totalCount === null ? channel?.videoCountText : totalCount.toLocaleString("en-US");
-  const visibleVideoIds = displayedVideos.map((video) => video.video_id);
+  const visibleVideoIds = Array.from(
+    new Set(displayedVideos.map((video) => video.video_id))
+  );
   const selectedVisibleCount = visibleVideoIds.filter((videoId) =>
     selectedVideoIds.has(videoId)
   ).length;
@@ -589,8 +592,12 @@ export function VideoSelectorPlaceholder() {
     updatePage(nextPage);
   }
 
-  async function runVideoSearch(): Promise<boolean> {
-    const activeQuery = query.trim();
+  async function runVideoSearch(
+    queryOverride?: string,
+    options: { replaceUrl?: boolean } = {}
+  ): Promise<boolean> {
+    const activeQuery = (queryOverride ?? query).trim();
+    const replaceUrl = options.replaceUrl ?? true;
 
     if (!activeQuery || (!channel && !isTopicMode)) {
       return false;
@@ -600,6 +607,22 @@ export function VideoSelectorPlaceholder() {
     setIsSearchingVideos(true);
     setErrorMessage("");
     setSearchPage(1);
+
+    if (replaceUrl) {
+      const params = new URLSearchParams(searchParams.toString());
+
+      if (isTopicMode) {
+        params.set("topic", activeQuery);
+        params.set("limit", topicLimit.toString());
+        router.push(`/topics?${params.toString()}`);
+        setIsSearchingVideos(false);
+        return true;
+      }
+
+      params.set("search", activeQuery);
+      params.delete("page");
+      router.replace(`${pathname}?${params.toString()}`);
+    }
 
     try {
       const response = isTopicMode
@@ -615,8 +638,8 @@ export function VideoSelectorPlaceholder() {
       setRankedVideos(response.videos);
       setHasMore(false);
       setTotalCount(response.total_count);
-      setSelectedVideoIds((current) => {
-        const next = isTopicMode ? new Set<string>() : new Set(current);
+      setSelectedVideoIds(() => {
+        const next = new Set<string>();
         response.videos.forEach((video) => {
           if (video.selected) {
             next.add(video.video_id);
@@ -624,8 +647,8 @@ export function VideoSelectorPlaceholder() {
         });
         return next;
       });
-      setSelectedVideosById((current) => {
-        const next = isTopicMode ? new Map<string, VideoMetadata>() : new Map(current);
+      setSelectedVideosById(() => {
+        const next = new Map<string, VideoMetadata>();
         response.videos.forEach((video) => {
           if (video.selected) {
             next.set(video.video_id, video);
@@ -645,6 +668,25 @@ export function VideoSelectorPlaceholder() {
     }
   }
 
+  useEffect(() => {
+    if (isTopicMode) {
+      restoredChannelSearchRef.current = "";
+      return;
+    }
+
+    const activeSearch = sourceSearch.trim();
+
+    if (!channel || !activeSearch || restoredChannelSearchRef.current === activeSearch) {
+      return;
+    }
+
+    setQuery(activeSearch);
+    restoredChannelSearchRef.current = activeSearch;
+    void runVideoSearch(activeSearch, { replaceUrl: false });
+    // runVideoSearch intentionally stays outside deps; restoredChannelSearchRef prevents repeats.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel, isTopicMode, sourceSearch]);
+
 
   function clearVideoSearch() {
     setQuery("");
@@ -655,13 +697,20 @@ export function VideoSelectorPlaceholder() {
   async function handleCreateKnowledgeBase() {
     if (
       (!channel && !isTopicMode) ||
-      selectedVideosById.size === 0 ||
+      selectedVideoIds.size === 0 ||
       (knowledgeBaseMode === "local" && !outputDir.trim())
     ) {
       return;
     }
 
-    const selectedVideos = Array.from(selectedVideosById.values());
+    const selectedVideos = Array.from(selectedVideoIds)
+      .map((videoId) => selectedVideosById.get(videoId))
+      .filter((video): video is VideoMetadata => Boolean(video));
+
+    if (selectedVideos.length === 0) {
+      setKnowledgeBaseError("Select at least one video to create a knowledge base.");
+      return;
+    }
 
     setIsCreatingKnowledgeBase(true);
     setKnowledgeBaseError("");
@@ -1134,9 +1183,9 @@ export function VideoSelectorPlaceholder() {
               </div>
             ) : displayedVideos.length > 0 ? (
               <div className="min-w-[900px]">
-                {displayedVideos.map((video) => (
+                {displayedVideos.map((video, index) => (
                   <div
-                    key={video.video_id}
+                    key={`${video.video_id}-${index}`}
                     data-cursor-light
                     className="grid grid-cols-[48px_minmax(360px,1.6fr)_112px_130px_130px_100px_72px] items-center border-b border-[var(--yt-border)] px-4 py-3 text-sm last:border-b-0 hover:bg-[var(--yt-card-strong)]"
                   >
