@@ -1,68 +1,75 @@
 # YouTube Knowledge Miner
 
 <p align="center">
-  <strong>Turn YouTube channels, topics, videos, and Shorts into clean AI-ready knowledge bases.</strong>
+  <strong>Turn YouTube channels and topics into downloadable, RAG-ready Markdown knowledge bases.</strong>
 </p>
 
 <p align="center">
-  Mine useful YouTube source material into local Markdown context files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval workflow.
+  Mine useful videos, Shorts, transcripts, metadata, and comments into clean files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval pipeline.
 </p>
 
 <p align="center">
-  <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-111111">
-  <img alt="Backend" src="https://img.shields.io/badge/backend-FastAPI-009688">
-  <img alt="Frontend" src="https://img.shields.io/badge/frontend-Next.js-000000">
-  <img alt="Output" src="https://img.shields.io/badge/output-Markdown-444444">
+  <a href="https://youtube-knowledge-miner-37qj.vercel.app"><strong>Live App</strong></a>
+  ·
+  <a href="https://youtube-knowledge-miner-37qj.vercel.app/topics?topic=acne&limit=50">Example Topic Search</a>
+  ·
+  <a href="#quick-start">Run Locally</a>
 </p>
 
-## What It Does
+<p align="center">
+  <img alt="Next.js" src="https://img.shields.io/badge/frontend-Next.js-111111?style=for-the-badge&logo=nextdotjs&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white">
+  <img alt="YouTube" src="https://img.shields.io/badge/source-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white">
+  <img alt="Markdown" src="https://img.shields.io/badge/output-Markdown-333333?style=for-the-badge&logo=markdown&logoColor=white">
+</p>
 
-YouTube Knowledge Miner helps you find the right videos, select the ones that matter, and export them into a portable research corpus.
+![YouTube Knowledge Miner home screen](docs/images/home.png)
 
-Start from:
+## Why It Exists
 
-- A YouTube channel name, handle, or URL
-- A broad research topic
-- Regular YouTube videos
-- YouTube Shorts, when returned by search or channel Shorts URLs
+YouTube has huge pockets of useful knowledge, but it is hard to search, compare, cite, or reuse inside AI tools. YouTube Knowledge Miner gives you a focused workflow:
 
-Then:
+1. Start from a channel, handle, URL, or broad topic.
+2. Rank videos by relevance and popularity signals.
+3. Select exactly the videos you want across pagination.
+4. Export a clean Markdown corpus with source metadata.
+5. Drop the files into your favorite AI or RAG workflow.
 
-- Search and rank videos by relevance
-- Auto-select strong matches using keyword confidence
-- Keep or change selections across pagination
-- Export selected videos as one combined context file or one file per video
-- Save locally or download a ready-to-use zip package
+The app does not bundle an LLM or lock your output into a platform. It creates files you control.
 
-No hosted backend. No bundled LLM. No vendor lock-in. The app focuses on one thing: turning YouTube source material into files you control.
+## Screenshots
 
-## Why This Exists
+### Search By Topic
 
-Long-form channels and topic searches can contain hundreds of hours of useful knowledge, but the material is hard to search, cite, compare, or reuse inside AI tools.
+Topic searches inspect a configurable number of YouTube results, rank them, auto-select confident matches, and preserve manual selection across pages.
 
-This project converts selected videos into grounded Markdown context:
+![Topic search results for acne](docs/images/topic-results.png)
 
-- Metadata
-- Descriptions
-- Transcripts when available
-- Comments when requested and available
-- Channel/source context
-- An `index.json` manifest
+### Create A Knowledge Base
 
-The resulting folder behaves like a research corpus you can open, attach, search, summarize, cite, or feed into your own RAG pipeline.
+Hosted deployments use **Download** mode, which generates a zip package in the browser. Local runs also expose **Local** mode for writing directly to a folder on your machine.
+
+![Create knowledge base download modal](docs/images/create-knowledge-base.png)
+
+### Resolve Channels
+
+Channel search helps you pick the correct result using names, handles, descriptions, verification status, and subscriber counts.
+
+![Channel search results](docs/images/channel-search.png)
 
 ## Highlights
 
 | Area | What You Get |
 | --- | --- |
-| Channel discovery | Resolve channels by URL, handle, or name, then choose the correct result. |
-| Topic mining | Search YouTube by topic and choose how many results to examine. |
-| Ranking | Videos are scored by title, description, tags, and query coverage. |
-| Selection | Auto-selected strong matches, manual toggles, select current page, select all ranked results, and unselect all. |
-| Pagination | Selection state persists across pages and export uses only the videos currently selected. |
-| Export modes | Local folder export or downloadable zip package. |
-| File structure | One combined context file by default, or optional file per video. |
-| Progress UI | Live export progress with current thumbnail, title, count, and red-to-green progress bar. |
+| Channel discovery | Resolve channels by URL, handle, or name, then choose the correct channel. |
+| Topic mining | Search YouTube by topic and choose how many results to inspect. |
+| Ranking | Score videos using title, description, tags, query coverage, views, and relevance signals. |
+| Selection | Auto-selected strong matches, manual toggles, select visible page, select all results, and unselect all. |
+| Pagination | Selection state persists across pages, and export uses only the selected videos. |
+| Shorts | Shorts are treated as videos when returned by search or channel Shorts URLs. |
+| Export | Download a zip on hosted Vercel, or write files locally when running the backend on your machine. |
+| File layout | File per video is selected by default; you can switch to one combined context file. |
+| Progress | Export locks the modal and shows thumbnail, title, progress count, and red-to-green progress. |
 | Theme | Automatically follows the browser/system light or dark theme. |
 
 ## Quick Start
@@ -104,30 +111,21 @@ http://127.0.0.1:3000
 
 ### 1. Choose A Starting Point
 
-On the home screen, choose:
+Use the home screen to choose:
 
-- **Channel**: paste a channel URL or type an exact channel name or handle.
-- **Topic**: enter a research topic and choose the number of YouTube results to inspect.
+- **Channel**: paste a YouTube channel URL, handle, or exact channel name.
+- **Topic**: enter a research topic and choose how many YouTube results to inspect.
 
 ### 2. Pick The Right Channel
 
-If the channel search returns multiple matches, compare:
-
-- Channel name
-- Handle
-- Subscriber count
-- Description
-- Verification state
-- YouTube link
-
-Then continue to video selection.
+If channel search returns multiple matches, compare the channel name, handle, description, subscriber count, verification state, and YouTube link before continuing.
 
 ### 3. Search, Rank, And Select Videos
 
-In the video selector:
+In the video selector you can:
 
 - Browse channel videos page by page
-- Search within a selected channel
+- Search inside a selected channel
 - Search and rerank topic results
 - Refresh without losing the active search query
 - Select visible rows, all ranked results, or clear all selections
@@ -136,45 +134,36 @@ Auto-selection is intentionally helpful, not final. You can always override it b
 
 ### 4. Create The Knowledge Base
 
-Choose an export destination:
+Choose the export shape:
 
-- **Local**: choose a folder and write files directly to your machine.
-- **Download**: create a zip package and download it.
+- **File per video**: selected by default, ideal for RAG and source-level review.
+- **Combined context**: one Markdown file containing all selected videos.
 
-Choose file structure:
+Choose the export target:
 
-- **Combined context**: one Markdown file containing all selected videos. This is the default.
-- **File per video**: one Markdown file per selected video.
+- **Download**: create a zip package. This is the hosted Vercel behavior.
+- **Local**: choose a folder and write files directly. This is available when running locally.
 
-During export, the modal locks until the job finishes. It shows:
-
-- Current video thumbnail
-- Current video title
-- Completed count
-- Progress bar
-- Rotating extraction stage
-- Skipped-video warnings if a video fails
+During export, the modal cannot be closed until the job finishes. It shows the current video thumbnail, title, count, progress bar, rotating extraction stage, and skipped-video warnings if something fails.
 
 ## Output
 
-When export finishes, the generated folder contains:
+When export finishes, the generated package contains:
 
 ```text
-your-output-folder/
-└── Channel Or Topic Name/
-    ├── index.json
-    └── combined-context.md
+Channel Or Topic Name/
+├── index.json
+├── 001 - First Video.md
+├── 002 - Second Video.md
+└── 003 - Third Video.md
 ```
 
-If **File per video** is enabled:
+If you turn off **File per video**, the folder contains one combined Markdown file:
 
 ```text
-your-output-folder/
-└── Channel Or Topic Name/
-    ├── index.json
-    ├── 001 - First Video.md
-    ├── 002 - Second Video.md
-    └── 003 - Third Video.md
+Channel Or Topic Name/
+├── index.json
+└── combined-context.md
 ```
 
 Each Markdown file is written for downstream AI grounding. It includes:
@@ -189,11 +178,44 @@ Each Markdown file is written for downstream AI grounding. It includes:
 - Transcript when captions are available
 - Comments when requested and available
 
-Existing matching files are overwritten, so rerunning an export refreshes the knowledge base instead of creating duplicate clutter.
+Existing matching files are overwritten during local export, so rerunning an export refreshes the knowledge base instead of creating duplicates.
+
+## Hosted Deployment
+
+The public app is deployed on Vercel:
+
+```text
+https://youtube-knowledge-miner-37qj.vercel.app
+```
+
+Hosted behavior is intentionally browser-safe:
+
+- The frontend calls the backend through `/_/backend`.
+- The app exposes **Download** export only.
+- The downloaded zip contains the generated Markdown corpus.
+
+Recommended Vercel environment variables:
+
+```env
+APP_NAME=youtube-knowledge-miner
+APP_ENV=production
+FRONTEND_ORIGIN=https://youtube-knowledge-miner-37qj.vercel.app
+DEFAULT_CHANNEL_SEARCH_LIMIT=8
+VIDEO_METADATA_WORKERS=4
+REQUEST_TIMEOUT_SECONDS=20
+VIDEO_SEARCH_RESULT_LIMIT=500
+VIDEO_SEARCH_SCAN_LIMIT=1000
+```
+
+`NEXT_PUBLIC_API_BASE_URL` is optional. If you set it, use:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=/_/backend
+```
 
 ## Using The Output With AI Tools
 
-This project intentionally stops at file creation. It does not ship a local LLM, prompt router, vector database, or chat UI.
+This project stops at file creation. It does not ship a local LLM, vector database, or chat UI.
 
 Good next steps:
 
@@ -202,7 +224,7 @@ Good next steps:
 - Attach the generated Markdown files to Claude, ChatGPT, or another file-aware assistant.
 - Build your own retrieval workflow on top of the Markdown files and `index.json`.
 
-The exported files include explicit source framing so an AI assistant can treat them as source material from videos, not as user instructions.
+The exported files include explicit source framing so an AI assistant can treat them as video source material, not user instructions.
 
 ## Shorts Support
 
@@ -251,11 +273,9 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 
 ## Configuration
 
-Backend configuration lives in `backend/.env`.
+Backend configuration lives in `backend/.env`. On first run, `setup_and_run.py` creates it from `backend/.env.example`.
 
-On first run, `setup_and_run.py` creates it from `backend/.env.example`.
-
-Available settings:
+Available local settings:
 
 ```env
 APP_NAME=youtube-channel-miner
@@ -280,12 +300,15 @@ You usually do not need to change these for local use.
 │   ├── app/api/          # FastAPI routes
 │   ├── app/services/     # YouTube fetching, ranking, export, folder picker
 │   ├── app/schemas/      # Request and response models
+│   ├── index.py          # Vercel FastAPI entrypoint
 │   └── requirements.txt
+├── docs/images/          # README screenshots
 ├── frontend/
 │   ├── src/app/          # Next.js app routes and global styles
 │   ├── src/components/   # Channel search, video selector, UI primitives
 │   ├── src/lib/          # API client and local selection store
 │   └── package.json
+├── vercel.json           # Multi-service Vercel deployment config
 ├── setup_and_run.py      # Cross-platform setup and local runner
 └── README.md
 ```
@@ -310,7 +333,7 @@ The app uses captions available through YouTube transcript access. Some videos d
 
 **Folder picker does not appear**
 
-The folder picker uses local desktop dialogs from the backend process. Make sure the backend is running on your local machine, not a headless remote shell.
+The folder picker uses local desktop dialogs from the backend process. Make sure the backend is running on your local machine, not a headless remote shell. Hosted Vercel deployments use Download mode instead.
 
 **The browser tab icon does not refresh**
 
@@ -331,10 +354,11 @@ cd frontend && npm run build
 
 YouTube Knowledge Miner builds on excellent open-source tools:
 
-- [FastAPI](https://fastapi.tiangolo.com/) for the local backend
+- [FastAPI](https://fastapi.tiangolo.com/) for the backend
 - [Next.js](https://nextjs.org/) and [React](https://react.dev/) for the frontend
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube metadata extraction
 - [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) for transcript retrieval
 - [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) for fast relevance scoring
+- [Vercel](https://vercel.com/) for the hosted demo
 
 Built for people who want AI answers grounded in source material they actually control.
