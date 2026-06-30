@@ -559,8 +559,8 @@ def create_knowledge_base_events(
                 *(
                     [
                         f"Transcript extraction was blocked for {blocked_transcript_count} of {total} videos "
-                        "from the current network/IP. If this is local, wait a while and retry a smaller batch. "
-                        "For best results, keep using the local app or sideloaded extension instead of a hosted deployment."
+                        "from the current network/IP. Wait a while, retry a smaller batch, or increase "
+                        "YOUTUBE_TRANSCRIPT_DELAY_SECONDS in backend/.env."
                     ]
                     if blocked_transcript_count
                     else []

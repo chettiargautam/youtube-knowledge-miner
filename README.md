@@ -31,19 +31,19 @@
 
 YouTube Knowledge Miner turns selected YouTube videos into clean Markdown files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval pipeline.
 
-The project is now local-first. Hosted cloud backends are commonly blocked by YouTube transcript endpoints, so the recommended workflow is to run the app on your own machine or use the included sideloaded Brave/Chrome/Edge extension with the local backend.
+The supported workflow is local: run the app on your machine, or use the included sideloaded Brave/Chrome/Edge extension with the local backend.
 
 ## Why Local First
 
 YouTube does not provide a simple public API for arbitrary video transcripts. This app uses public caption access through `youtube-transcript-api` and `yt-dlp` fallbacks.
 
-Running locally helps because transcript requests come from your own machine/network instead of a shared cloud IP. It does not make YouTube unlimited. If you request too many transcripts too quickly, YouTube can still temporarily rate-limit your current network/IP. The app now reports that honestly instead of handing you metadata-only files as if they were complete.
+Running locally means transcript requests come from your own machine/network. It does not make YouTube unlimited. If you request too many transcripts too quickly, YouTube can still temporarily rate-limit your current network/IP. The app reports that honestly instead of handing you metadata-only files as if they were complete.
 
 ## Highlights
 
 | Area | What You Get |
 | --- | --- |
-| Local-first mining | Run the backend and frontend on `127.0.0.1`; no hosted extraction required. |
+| Local-first mining | Run the backend and frontend on `127.0.0.1`. |
 | Topic search | Search YouTube by topic, rank results, and auto-select strong matches. |
 | Channel workflows | Resolve channel URLs, handles, or names, then browse/search videos. |
 | Bulk selection | Select visible videos, all ranked results, or individual videos. |
@@ -256,14 +256,6 @@ YOUTUBE_TRANSCRIPT_DELAY_SECONDS=5.0
 
 Then restart `setup_and_run.py`.
 
-## Hosted Deployment
-
-Hosted deployment is not the recommended extraction path. Cloud/serverless IPs are commonly blocked by YouTube transcript endpoints, especially when processing batches.
-
-The repo still contains Vercel configuration because it can be useful for private previews or UI demos, but the real transcript-mining workflow is local-first.
-
-If you deploy a private preview, treat it as best-effort and expect transcript blocks. Use the local app or sideloaded extension for real exports.
-
 ## Development
 
 Useful checks:
@@ -313,7 +305,7 @@ Your current network/IP may be temporarily rate-limited by YouTube. Wait a while
 YOUTUBE_TRANSCRIPT_DELAY_SECONDS=5.0
 ```
 
-Local-first reduces hosted-cloud blocking, but it does not bypass YouTube rate limits.
+Local-first does not bypass YouTube rate limits.
 
 ### Some Videos Have No Transcript
 
@@ -340,8 +332,7 @@ npm audit
 ├── frontend/       # Next.js local web app
 ├── extension/      # Unpacked MV3 browser extension
 ├── docs/images/    # README screenshots
-├── setup_and_run.py
-└── vercel.json     # Optional private preview deployment config
+└── setup_and_run.py
 ```
 
 ## Acknowledgments

@@ -2,7 +2,7 @@
 
 This is an unpaid, sideloaded browser extension for Brave, Chrome, Edge, and other Chromium browsers.
 
-It talks to the local backend at `http://127.0.0.1:8000`. That means transcript extraction runs from the user's own machine/network instead of a hosted cloud IP.
+It talks to the local backend at `http://127.0.0.1:8000`. Transcript extraction runs from the user's own machine/network.
 
 ## Install In Brave, Chrome, Or Edge
 
