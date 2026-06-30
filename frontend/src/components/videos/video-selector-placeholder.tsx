@@ -784,7 +784,9 @@ export function VideoSelectorPlaceholder() {
           }
 
           if (event.type === "video_error") {
-            setKnowledgeBaseSkipped((current) => [...current, event.message]);
+            setKnowledgeBaseSkipped((current) =>
+              Array.from(new Set([...current, event.message]))
+            );
             setKnowledgeBaseCompleted(event.index);
             return;
           }
@@ -795,10 +797,32 @@ export function VideoSelectorPlaceholder() {
         },
       });
 
+      const transcriptCount = response.transcript_summary.available;
+      const missingTranscriptCount =
+        response.transcript_summary.blocked_by_youtube +
+        response.transcript_summary.unavailable;
+      const allTranscriptsMissing =
+        response.files.length > 0 && missingTranscriptCount > 0 && transcriptCount === 0;
+
+      setKnowledgeBaseSkipped(Array.from(new Set(response.warnings)));
+
+      if (allTranscriptsMissing) {
+        setKnowledgeBaseError(
+          response.warnings[0] ??
+            "No transcripts were downloaded. The generated files would contain metadata only."
+        );
+        return;
+      }
+
+      const transcriptSummary =
+        missingTranscriptCount > 0
+          ? ` ${missingTranscriptCount} ${missingTranscriptCount === 1 ? "video is" : "videos are"} missing transcripts.`
+          : "";
+
       setKnowledgeBaseResult(
         resolvedKnowledgeBaseMode === "download"
-          ? `Created ${response.count} ${response.count === 1 ? "file" : "files"}. Download ready.`
-          : `Created ${response.count} ${response.count === 1 ? "file" : "files"} in ${response.output_path}`
+          ? `Created ${response.count} ${response.count === 1 ? "file" : "files"}. Download ready.${transcriptSummary}`
+          : `Created ${response.count} ${response.count === 1 ? "file" : "files"} in ${response.output_path}.${transcriptSummary}`
       );
 
       if (resolvedKnowledgeBaseMode === "download") {

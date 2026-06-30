@@ -117,11 +117,18 @@ class KnowledgeBaseFileResult(BaseModel):
     comments_count: int
 
 
+class KnowledgeBaseTranscriptSummary(BaseModel):
+    available: int = 0
+    blocked_by_youtube: int = 0
+    unavailable: int = 0
+
+
 class KnowledgeBaseCreateResponse(BaseModel):
     output_path: str
     count: int
     files: list[KnowledgeBaseFileResult]
     warnings: list[str] = []
+    transcript_summary: KnowledgeBaseTranscriptSummary = KnowledgeBaseTranscriptSummary()
     download_url: str | None = None
     download_filename: str | None = None
 

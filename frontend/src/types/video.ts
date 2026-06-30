@@ -62,6 +62,11 @@ export type KnowledgeBaseCreateResponse = {
   count: number;
   files: KnowledgeBaseFileResult[];
   warnings: string[];
+  transcript_summary: {
+    available: number;
+    blocked_by_youtube: number;
+    unavailable: number;
+  };
   download_url: string | null;
   download_filename: string | null;
 };

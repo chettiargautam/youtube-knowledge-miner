@@ -2,14 +2,26 @@ from pathlib import Path
 from datetime import datetime, timezone
 import json
 import re
+import time
 from collections.abc import Iterator
 
+import requests
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import (
+    IpBlocked,
+    NoTranscriptFound,
+    RequestBlocked,
+    TranscriptsDisabled,
+    VideoUnavailable,
+)
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 
+from app.core.config import get_settings
 from app.schemas.video import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseCreateResponse,
     KnowledgeBaseFileResult,
+    KnowledgeBaseTranscriptSummary,
     KnowledgeBaseVideoInput,
     VideoMetadata,
 )
@@ -47,9 +59,168 @@ def _fetch_video_info(
     return info if isinstance(info, dict) else {}
 
 
-def _fetch_transcript(video_id: str) -> tuple[str, str]:
+def _caption_text_from_json3(payload: dict) -> str:
+    lines: list[str] = []
+    events = payload.get("events")
+    if not isinstance(events, list):
+        return ""
+
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+
+        segments = event.get("segs")
+        if not isinstance(segments, list):
+            continue
+
+        text = "".join(
+            str(segment.get("utf8") or "")
+            for segment in segments
+            if isinstance(segment, dict)
+        )
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            lines.append(text)
+
+    return "\n".join(lines)
+
+
+def _caption_text_from_vtt(value: str) -> str:
+    lines: list[str] = []
+
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if (
+            not line
+            or line == "WEBVTT"
+            or line.startswith("Kind:")
+            or line.startswith("Language:")
+            or "-->" in line
+            or line.isdigit()
+        ):
+            continue
+
+        line = re.sub(r"<[^>]+>", "", line)
+        line = re.sub(r"\s+", " ", line).strip()
+        if line and (not lines or lines[-1] != line):
+            lines.append(line)
+
+    return "\n".join(lines)
+
+
+def _subtitle_track_score(track: dict) -> tuple[int, int]:
+    ext = str(track.get("ext") or "")
+    name = str(track.get("name") or "")
+    url = str(track.get("url") or "")
+
+    format_score = 0
+    if ext == "json3" or "fmt=json3" in url:
+        format_score = 3
+    elif ext == "vtt" or "fmt=vtt" in url:
+        format_score = 2
+    elif ext in {"srv3", "ttml"}:
+        format_score = 1
+
+    human_score = 1 if "auto-generated" not in name.lower() else 0
+    return human_score, format_score
+
+
+def _extract_caption_tracks(tracks_by_language: dict | None) -> list[dict]:
+    if not isinstance(tracks_by_language, dict):
+        return []
+
+    tracks: list[dict] = []
+    for language in ("en", "en-US", "en-GB"):
+        language_tracks = tracks_by_language.get(language)
+        if isinstance(language_tracks, list):
+            tracks.extend(track for track in language_tracks if isinstance(track, dict))
+
+    if not tracks:
+        for language, language_tracks in tracks_by_language.items():
+            if str(language).lower().startswith("en") and isinstance(language_tracks, list):
+                tracks.extend(track for track in language_tracks if isinstance(track, dict))
+
+    return sorted(tracks, key=_subtitle_track_score, reverse=True)
+
+
+def _fetch_transcript_with_ytdlp(video_id: str) -> tuple[str, str]:
     try:
-        transcript = YouTubeTranscriptApi().fetch(video_id, languages=("en",))
+        with make_ydl(
+            {
+                "extract_flat": False,
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": ["en", "en-US", "en-GB"],
+                "subtitlesformat": "json3/vtt/best",
+            }
+        ) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+    except Exception as exc:
+        return "", f"unavailable: yt-dlp subtitle fallback failed. {exc}"
+
+    if not isinstance(info, dict):
+        return "", "unavailable: yt-dlp returned no video metadata"
+
+    tracks = [
+        *_extract_caption_tracks(info.get("subtitles")),
+        *_extract_caption_tracks(info.get("automatic_captions")),
+    ]
+
+    for track in tracks:
+        url = track.get("url")
+        if not isinstance(url, str) or not url:
+            continue
+
+        try:
+            response = requests.get(url, timeout=20)
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+
+        ext = str(track.get("ext") or "")
+        if ext == "json3" or "fmt=json3" in url:
+            try:
+                text = _caption_text_from_json3(response.json())
+            except ValueError:
+                text = ""
+        else:
+            text = _caption_text_from_vtt(response.text)
+
+        if text:
+            return text, "available"
+
+    return "", "unavailable: no readable English subtitle track found through yt-dlp"
+
+
+def _fetch_transcript_with_api(video_id: str) -> tuple[str, str]:
+    settings = get_settings()
+    transcript_api = YouTubeTranscriptApi()
+
+    if settings.webshare_proxy_username and settings.webshare_proxy_password:
+        locations = [
+            location.strip().upper()
+            for location in settings.webshare_proxy_locations.split(",")
+            if location.strip()
+        ]
+        transcript_api = YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(
+                proxy_username=settings.webshare_proxy_username,
+                proxy_password=settings.webshare_proxy_password,
+                filter_ip_locations=locations or None,
+                retries_when_blocked=settings.webshare_proxy_retries_when_blocked,
+            )
+        )
+    elif settings.youtube_transcript_proxy_http or settings.youtube_transcript_proxy_https:
+        transcript_api = YouTubeTranscriptApi(
+            proxy_config=GenericProxyConfig(
+                http_url=settings.youtube_transcript_proxy_http or None,
+                https_url=settings.youtube_transcript_proxy_https or None,
+            )
+        )
+
+    try:
+        transcript = transcript_api.fetch(video_id, languages=("en", "en-US", "en-GB"))
         lines: list[str] = []
         for item in transcript:
             text = item.get("text") if isinstance(item, dict) else getattr(item, "text", "")
@@ -57,10 +228,33 @@ def _fetch_transcript(video_id: str) -> tuple[str, str]:
                 lines.append(str(text).strip())
         if lines:
             return "\n".join(lines), "available"
+    except (IpBlocked, RequestBlocked):
+        return "", "blocked_by_youtube: YouTube blocked transcript access from this network/IP"
+    except TranscriptsDisabled:
+        return "", "unavailable: transcripts disabled for this video"
+    except NoTranscriptFound as exc:
+        return "", f"unavailable: no English transcript found. {exc}"
+    except VideoUnavailable:
+        return "", "unavailable: video unavailable"
     except Exception as exc:
         return "", f"unavailable: {exc}"
 
     return "", "unavailable"
+
+
+def _fetch_transcript(video_id: str) -> tuple[str, str]:
+    transcript, transcript_status = _fetch_transcript_with_api(video_id)
+    if transcript:
+        return transcript, transcript_status
+
+    fallback_transcript, fallback_status = _fetch_transcript_with_ytdlp(video_id)
+    if fallback_transcript:
+        return fallback_transcript, fallback_status
+
+    if transcript_status.startswith("blocked_by_youtube"):
+        return "", f"{transcript_status}; {fallback_status}"
+
+    return "", f"{transcript_status}; {fallback_status}"
 
 
 def _extract_comments(info: dict, max_comments: int) -> list[str]:
@@ -159,6 +353,9 @@ def create_knowledge_base_events(
     warnings: list[str] = []
     index_items: list[dict] = []
     combined_sections: list[tuple[VideoMetadata, str, str, int]] = []
+    available_transcript_count = 0
+    blocked_transcript_count = 0
+    unavailable_transcript_count = 0
 
     if request.download_transcribe_if_missing:
         warnings.append(
@@ -166,6 +363,7 @@ def create_knowledge_base_events(
         )
 
     total = len(request.videos)
+    transcript_delay_seconds = max(0, get_settings().youtube_transcript_delay_seconds)
 
     yield {
         "type": "start",
@@ -203,10 +401,19 @@ def create_knowledge_base_events(
                 )
 
             transcript, transcript_status = _fetch_transcript(metadata.video_id)
+            if transcript_status == "available":
+                available_transcript_count += 1
+            elif transcript_status.startswith("blocked_by_youtube"):
+                blocked_transcript_count += 1
+            else:
+                unavailable_transcript_count += 1
             comments = _extract_comments(
                 info,
                 request.max_comments if request.include_comments else 0,
             )
+
+            if transcript_delay_seconds and index < total:
+                time.sleep(transcript_delay_seconds)
 
             markdown = _markdown_for_video(
                 channel_name=request.channel_name,
@@ -321,6 +528,11 @@ def create_knowledge_base_events(
                 "channel_name": request.channel_name,
                 "channel_url": request.channel_url,
                 "created_at": datetime.now(timezone.utc).isoformat(),
+                "transcript_summary": {
+                    "available": available_transcript_count,
+                    "blocked_by_youtube": blocked_transcript_count,
+                    "unavailable": unavailable_transcript_count,
+                },
                 "files": index_items,
             },
             indent=2,
@@ -329,16 +541,37 @@ def create_knowledge_base_events(
         encoding="utf-8",
     )
 
-    result = KnowledgeBaseCreateResponse(
-        output_path=str(channel_dir),
-        count=len(results),
-        files=results,
-        warnings=warnings,
-    )
-
     yield {
         "type": "done",
         "total": total,
         "completed": total,
-        "result": result,
+        "result": KnowledgeBaseCreateResponse(
+            output_path=str(channel_dir),
+            count=len(results),
+            files=results,
+            transcript_summary=KnowledgeBaseTranscriptSummary(
+                available=available_transcript_count,
+                blocked_by_youtube=blocked_transcript_count,
+                unavailable=unavailable_transcript_count,
+            ),
+            warnings=[
+                *warnings,
+                *(
+                    [
+                        f"Transcript extraction was blocked for {blocked_transcript_count} of {total} videos "
+                        "from the current network/IP. If this is local, wait a while and retry a smaller batch. "
+                        "For best results, keep using the local app or sideloaded extension instead of a hosted deployment."
+                    ]
+                    if blocked_transcript_count
+                    else []
+                ),
+                *(
+                    [
+                        "No transcripts were downloaded. The generated Markdown files contain metadata only."
+                    ]
+                    if total and available_transcript_count == 0
+                    else []
+                ),
+            ],
+        ),
     }

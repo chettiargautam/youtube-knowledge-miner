@@ -1,98 +1,80 @@
 # YouTube Knowledge Miner
 
 <p align="center">
-  <strong>Turn YouTube channels and topics into downloadable, RAG-ready Markdown knowledge bases.</strong>
+  <strong>Local-first YouTube transcript and knowledge-base miner.</strong>
 </p>
 
 <p align="center">
-  Mine useful videos, Shorts, transcripts, metadata, and comments into clean files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval pipeline.
+  Search YouTube by topic or channel, select the videos that matter, and export RAG-ready Markdown files with metadata, descriptions, comments, and transcripts when captions are available.
 </p>
 
 <p align="center">
-  <a href="https://youtube-knowledge-miner-37qj.vercel.app"><strong>Live App</strong></a>
+  <a href="#quick-start"><strong>Quick Start</strong></a>
   ·
-  <a href="https://youtube-knowledge-miner-37qj.vercel.app/topics?topic=acne&limit=50">Example Topic Search</a>
+  <a href="#browser-extension">Browser Extension</a>
   ·
-  <a href="#quick-start">Run Locally</a>
+  <a href="#transcript-reliability">Transcript Reliability</a>
+  ·
+  <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
 <p align="center">
   <img alt="Next.js" src="https://img.shields.io/badge/frontend-Next.js-111111?style=for-the-badge&logo=nextdotjs&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white">
-  <img alt="YouTube" src="https://img.shields.io/badge/source-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white">
-  <img alt="Markdown" src="https://img.shields.io/badge/output-Markdown-333333?style=for-the-badge&logo=markdown&logoColor=white">
+  <img alt="Extension" src="https://img.shields.io/badge/extension-MV3-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white">
+  <img alt="Output" src="https://img.shields.io/badge/output-Markdown-333333?style=for-the-badge&logo=markdown&logoColor=white">
 </p>
 
 ![YouTube Knowledge Miner home screen](docs/images/home.png)
 
-## Why It Exists
+## What It Does
 
-YouTube has huge pockets of useful knowledge, but it is hard to search, compare, cite, or reuse inside AI tools. YouTube Knowledge Miner gives you a focused workflow:
+YouTube Knowledge Miner turns selected YouTube videos into clean Markdown files you can use with Codex, Claude, ChatGPT, Cursor, Copilot, VS Code, or your own retrieval pipeline.
 
-1. Start from a channel, handle, URL, or broad topic.
-2. Rank videos by relevance and popularity signals.
-3. Select exactly the videos you want across pagination.
-4. Export a clean Markdown corpus with source metadata.
-5. Drop the files into your favorite AI or RAG workflow.
+The project is now local-first. Hosted cloud backends are commonly blocked by YouTube transcript endpoints, so the recommended workflow is to run the app on your own machine or use the included sideloaded Brave/Chrome/Edge extension with the local backend.
 
-The app does not bundle an LLM or lock your output into a platform. It creates files you control.
+## Why Local First
 
-## Screenshots
+YouTube does not provide a simple public API for arbitrary video transcripts. This app uses public caption access through `youtube-transcript-api` and `yt-dlp` fallbacks.
 
-### Search By Topic
-
-Topic searches inspect a configurable number of YouTube results, rank them, auto-select confident matches, and preserve manual selection across pages.
-
-![Topic search results for acne](docs/images/topic-results.png)
-
-### Create A Knowledge Base
-
-Hosted deployments use **Download** mode, which generates a zip package in the browser. Local runs also expose **Local** mode for writing directly to a folder on your machine.
-
-![Create knowledge base download modal](docs/images/create-knowledge-base.png)
-
-### Resolve Channels
-
-Channel search helps you pick the correct result using names, handles, descriptions, verification status, and subscriber counts.
-
-![Channel search results](docs/images/channel-search.png)
+Running locally helps because transcript requests come from your own machine/network instead of a shared cloud IP. It does not make YouTube unlimited. If you request too many transcripts too quickly, YouTube can still temporarily rate-limit your current network/IP. The app now reports that honestly instead of handing you metadata-only files as if they were complete.
 
 ## Highlights
 
 | Area | What You Get |
 | --- | --- |
-| Channel discovery | Resolve channels by URL, handle, or name, then choose the correct channel. |
-| Topic mining | Search YouTube by topic and choose how many results to inspect. |
-| Ranking | Score videos using title, description, tags, query coverage, views, and relevance signals. |
-| Selection | Auto-selected strong matches, manual toggles, select visible page, select all results, and unselect all. |
-| Pagination | Selection state persists across pages, and export uses only the selected videos. |
-| Shorts | Shorts are treated as videos when returned by search or channel Shorts URLs. |
-| Export | Download a zip on hosted Vercel, or write files locally when running the backend on your machine. |
-| File layout | File per video is selected by default; you can switch to one combined context file. |
-| Progress | Export locks the modal and shows thumbnail, title, progress count, and red-to-green progress. |
-| Theme | Automatically follows the browser/system light or dark theme. |
+| Local-first mining | Run the backend and frontend on `127.0.0.1`; no hosted extraction required. |
+| Topic search | Search YouTube by topic, rank results, and auto-select strong matches. |
+| Channel workflows | Resolve channel URLs, handles, or names, then browse/search videos. |
+| Bulk selection | Select visible videos, all ranked results, or individual videos. |
+| Transcript checks | Export responses include transcript counts for available, blocked, and unavailable videos. |
+| Honest failures | If every transcript fails, the UI reports the failure instead of auto-downloading a useless package. |
+| Export formats | Create one Markdown file per video or one combined context file. |
+| Browser extension | Sideload an unpaid MV3 extension for Brave, Chrome, Edge, and Chromium browsers. |
 
 ## Quick Start
 
-Prerequisites:
+### Requirements
 
 - Python 3.10 or newer
 - Node.js LTS with npm
-- Internet access for YouTube metadata and transcript fetching
+- Internet access for YouTube metadata and caption fetching
+
+### Run The Local App
 
 From the repository root:
-
-```bash
-python setup_and_run.py
-```
-
-If your system exposes Python as `python3`:
 
 ```bash
 python3 setup_and_run.py
 ```
 
-The script handles setup and starts both services:
+If your system uses `python` instead of `python3`:
+
+```bash
+python setup_and_run.py
+```
+
+The setup script:
 
 - Creates `backend/.env` from `backend/.env.example` when needed
 - Creates `backend/.venv`
@@ -107,48 +89,83 @@ Open:
 http://127.0.0.1:3000
 ```
 
+Leave the terminal running while you use the app.
+
+## Browser Extension
+
+The `extension/` folder contains an unpacked Manifest V3 extension:
+
+```text
+extension/
+├── manifest.json
+├── popup.html
+├── popup.css
+├── popup.js
+└── README.md
+```
+
+The extension is a local control panel for the backend at `http://127.0.0.1:8000`. It costs nothing to use and does not require publishing to an extension store.
+
+### Install In Brave, Chrome, Or Edge
+
+1. Start the local app:
+
+   ```bash
+   python3 setup_and_run.py
+   ```
+
+2. Open your browser's extension page:
+
+   ```text
+   brave://extensions
+   chrome://extensions
+   edge://extensions
+   ```
+
+3. Turn on **Developer mode**.
+4. Click **Load unpacked**.
+5. Select this repository's `extension` folder.
+6. Open **YouTube Knowledge Miner** from the browser toolbar.
+
+### Extension Notes
+
+- No Chrome Web Store account is required.
+- No publishing fee is required.
+- No proxy subscription is required.
+- The local backend must be running.
+- The extension can still see transcript blocks if your current network/IP is temporarily rate-limited by YouTube.
+- Safari is not targeted in the unpaid sideload flow because Safari extension distribution generally requires Apple's signing/tooling path.
+
 ## Product Flow
 
-### 1. Choose A Starting Point
+### 1. Choose A Source
 
-Use the home screen to choose:
+Use either the local web app or the extension:
 
-- **Channel**: paste a YouTube channel URL, handle, or exact channel name.
-- **Topic**: enter a research topic and choose how many YouTube results to inspect.
+- **Topic**: enter a broad topic and choose how many YouTube results to inspect.
+- **Channel**: paste a channel URL, handle, or exact channel name.
 
-### 2. Pick The Right Channel
+### 2. Select Videos
 
-If channel search returns multiple matches, compare the channel name, handle, description, subscriber count, verification state, and YouTube link before continuing.
+The app ranks and displays videos with useful metadata. You can keep the auto-selected videos, manually select individual videos, select all visible videos, or clear the selection.
 
-### 3. Search, Rank, And Select Videos
+### 3. Export The Knowledge Base
 
-In the video selector you can:
+Choose:
 
-- Browse channel videos page by page
-- Search inside a selected channel
-- Search and rerank topic results
-- Refresh without losing the active search query
-- Select visible rows, all ranked results, or clear all selections
+- **File per video**: best for RAG/source-level review.
+- **Combined context**: one Markdown file containing every selected video.
 
-Auto-selection is intentionally helpful, not final. You can always override it before export.
+Choose:
 
-### 4. Create The Knowledge Base
+- **Download**: create a zip package.
+- **Local**: write files directly to a chosen folder. This is available in the local web app.
 
-Choose the export shape:
-
-- **File per video**: selected by default, ideal for RAG and source-level review.
-- **Combined context**: one Markdown file containing all selected videos.
-
-Choose the export target:
-
-- **Download**: create a zip package. This is the hosted Vercel behavior.
-- **Local**: choose a folder and write files directly. This is available when running locally.
-
-During export, the modal cannot be closed until the job finishes. It shows the current video thumbnail, title, count, progress bar, rotating extraction stage, and skipped-video warnings if something fails.
+During export, the app shows progress and transcript warnings. A successful file is only useful for transcript-based context when its transcript status is `available`.
 
 ## Output
 
-When export finishes, the generated package contains:
+File-per-video exports look like:
 
 ```text
 Channel Or Topic Name/
@@ -158,7 +175,7 @@ Channel Or Topic Name/
 └── 003 - Third Video.md
 ```
 
-If you turn off **File per video**, the folder contains one combined Markdown file:
+Combined exports look like:
 
 ```text
 Channel Or Topic Name/
@@ -166,7 +183,7 @@ Channel Or Topic Name/
 └── combined-context.md
 ```
 
-Each Markdown file is written for downstream AI grounding. It includes:
+Each Markdown file includes:
 
 - Channel name and URL
 - Video title and URL
@@ -175,107 +192,47 @@ Each Markdown file is written for downstream AI grounding. It includes:
 - Duration
 - Views, likes, and comments when available
 - Description
-- Transcript when captions are available
+- Transcript status
+- Transcript text when captions are available
 - Comments when requested and available
 
-Existing matching files are overwritten during local export, so rerunning an export refreshes the knowledge base instead of creating duplicates.
+`index.json` includes a transcript summary:
 
-## Hosted Deployment
-
-The public app is deployed on Vercel:
-
-```text
-https://youtube-knowledge-miner-37qj.vercel.app
+```json
+{
+  "transcript_summary": {
+    "available": 12,
+    "blocked_by_youtube": 3,
+    "unavailable": 1
+  }
+}
 ```
 
-Hosted behavior is intentionally browser-safe:
+## Transcript Reliability
 
-- The frontend calls the backend through `/_/backend`.
-- The app exposes **Download** export only.
-- The downloaded zip contains the generated Markdown corpus.
+Transcript extraction is best-effort because YouTube caption access is unofficial and rate-limited.
 
-Recommended Vercel environment variables:
+The backend tries:
 
-```env
-APP_NAME=youtube-knowledge-miner
-APP_ENV=production
-FRONTEND_ORIGIN=https://youtube-knowledge-miner-37qj.vercel.app
-DEFAULT_CHANNEL_SEARCH_LIMIT=8
-VIDEO_METADATA_WORKERS=4
-REQUEST_TIMEOUT_SECONDS=20
-VIDEO_SEARCH_RESULT_LIMIT=500
-VIDEO_SEARCH_SCAN_LIMIT=1000
-```
+1. `youtube-transcript-api`
+2. `yt-dlp` subtitle and automatic-caption metadata
+3. readable English caption tracks when available
 
-`NEXT_PUBLIC_API_BASE_URL` is optional. If you set it, use:
+If YouTube blocks transcript requests from your current network/IP, the app marks those videos as blocked. This can happen locally too after too many requests. For large batches:
 
-```env
-NEXT_PUBLIC_API_BASE_URL=/_/backend
-```
+- Start with a small test batch.
+- Prefer 10-25 videos at a time.
+- Wait before retrying after blocks.
+- Increase `YOUTUBE_TRANSCRIPT_DELAY_SECONDS` in `backend/.env` if you see frequent blocks.
+- Avoid repeatedly exporting the same large batch while testing.
 
-## Using The Output With AI Tools
-
-This project stops at file creation. It does not ship a local LLM, vector database, or chat UI.
-
-Good next steps:
-
-- Open the generated folder in VS Code and ask Copilot about the files.
-- Open the folder with Codex and ask it to inspect, summarize, compare, or cite the video notes.
-- Attach the generated Markdown files to Claude, ChatGPT, or another file-aware assistant.
-- Build your own retrieval workflow on top of the Markdown files and `index.json`.
-
-The exported files include explicit source framing so an AI assistant can treat them as video source material, not user instructions.
-
-## Shorts Support
-
-The app treats Shorts as YouTube videos and can export them when they appear in results.
-
-Supported paths:
-
-- Topic searches that return Shorts
-- Direct video metadata for short videos
-- Channel Shorts URLs such as `https://www.youtube.com/@channel/shorts`
-
-Regular channel URLs are normalized to the channel `/videos` tab. If you specifically want Shorts from a channel, use that channel's `/shorts` URL or search by topic.
-
-## Running Services Manually
-
-The one-command setup is recommended, but you can run each service yourself.
-
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-PYTHONPATH="$PWD" uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-On Windows PowerShell:
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:PYTHONPATH = (Get-Location).Path
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev -- --hostname 127.0.0.1 --port 3000
-```
+The project intentionally does not ask for your YouTube login, Google credentials, or a paid proxy account.
 
 ## Configuration
 
-Backend configuration lives in `backend/.env`. On first run, `setup_and_run.py` creates it from `backend/.env.example`.
+Backend settings live in `backend/.env`.
 
-Available local settings:
+Common settings:
 
 ```env
 APP_NAME=youtube-channel-miner
@@ -288,56 +245,24 @@ VIDEO_METADATA_WORKERS=4
 REQUEST_TIMEOUT_SECONDS=20
 VIDEO_SEARCH_RESULT_LIMIT=500
 VIDEO_SEARCH_SCAN_LIMIT=1000
+YOUTUBE_TRANSCRIPT_DELAY_SECONDS=1.0
 ```
 
-You usually do not need to change these for local use.
+If transcript requests are frequently blocked, try:
 
-## Project Structure
-
-```text
-.
-├── backend/
-│   ├── app/api/          # FastAPI routes
-│   ├── app/services/     # YouTube fetching, ranking, export, folder picker
-│   ├── app/schemas/      # Request and response models
-│   ├── index.py          # Vercel FastAPI entrypoint
-│   └── requirements.txt
-├── docs/images/          # README screenshots
-├── frontend/
-│   ├── src/app/          # Next.js app routes and global styles
-│   ├── src/components/   # Channel search, video selector, UI primitives
-│   ├── src/lib/          # API client and local selection store
-│   └── package.json
-├── vercel.json           # Multi-service Vercel deployment config
-├── setup_and_run.py      # Cross-platform setup and local runner
-└── README.md
+```env
+YOUTUBE_TRANSCRIPT_DELAY_SECONDS=5.0
 ```
 
-## Troubleshooting
+Then restart `setup_and_run.py`.
 
-**`npm was not found`**
+## Hosted Deployment
 
-Install Node.js LTS, then run `python setup_and_run.py` again.
+Hosted deployment is not the recommended extraction path. Cloud/serverless IPs are commonly blocked by YouTube transcript endpoints, especially when processing batches.
 
-**Backend does not become ready**
+The repo still contains Vercel configuration because it can be useful for private previews or UI demos, but the real transcript-mining workflow is local-first.
 
-Check that port `8000` is free, then rerun the setup script.
-
-**Frontend port is already in use**
-
-Stop the existing service on port `3000`, or run the frontend manually with a different port.
-
-**A transcript is missing**
-
-The app uses captions available through YouTube transcript access. Some videos do not expose transcripts, or may block transcript retrieval. The generated Markdown file will still include metadata and description when available.
-
-**Folder picker does not appear**
-
-The folder picker uses local desktop dialogs from the backend process. Make sure the backend is running on your local machine, not a headless remote shell. Hosted Vercel deployments use Download mode instead.
-
-**The browser tab icon does not refresh**
-
-Browsers cache favicons aggressively. Hard refresh the page or clear site data if you recently changed the app icon.
+If you deploy a private preview, treat it as best-effort and expect transcript blocks. Use the local app or sideloaded extension for real exports.
 
 ## Development
 
@@ -350,15 +275,83 @@ cd frontend && npm run lint
 cd frontend && npm run build
 ```
 
+Run backend manually:
+
+```bash
+cd backend
+PYTHONPATH=. ./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Run frontend manually:
+
+```bash
+cd frontend
+npm run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+## Troubleshooting
+
+### Extension Says Backend Offline
+
+Start the local app first:
+
+```bash
+python3 setup_and_run.py
+```
+
+Then reload the extension popup.
+
+### Brave/Chrome Says The Extension Manifest Is Missing
+
+When using **Load unpacked**, select the `extension` folder itself. That folder must contain `manifest.json` directly.
+
+### Transcript Extraction Is Blocked Locally
+
+Your current network/IP may be temporarily rate-limited by YouTube. Wait a while, retry a smaller batch, and consider increasing:
+
+```env
+YOUTUBE_TRANSCRIPT_DELAY_SECONDS=5.0
+```
+
+Local-first reduces hosted-cloud blocking, but it does not bypass YouTube rate limits.
+
+### Some Videos Have No Transcript
+
+Some videos do not expose English captions, have captions disabled, are region/age restricted, or return caption tracks that cannot be read. Those files still include metadata and descriptions, but they are not full transcript context.
+
+### Folder Picker Does Not Appear
+
+The folder picker uses local desktop dialogs from the backend process. Make sure the backend is running on your local machine, not inside a headless remote shell.
+
+### npm Reports Vulnerabilities
+
+`npm install` may report dependency audit findings from the frontend dependency tree. They do not necessarily affect local use, but you can inspect them with:
+
+```bash
+cd frontend
+npm audit
+```
+
+## Repository Layout
+
+```text
+.
+├── backend/        # FastAPI backend and YouTube extraction services
+├── frontend/       # Next.js local web app
+├── extension/      # Unpacked MV3 browser extension
+├── docs/images/    # README screenshots
+├── setup_and_run.py
+└── vercel.json     # Optional private preview deployment config
+```
+
 ## Acknowledgments
 
 YouTube Knowledge Miner builds on excellent open-source tools:
 
 - [FastAPI](https://fastapi.tiangolo.com/) for the backend
 - [Next.js](https://nextjs.org/) and [React](https://react.dev/) for the frontend
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube metadata extraction
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube metadata and subtitle extraction
 - [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) for transcript retrieval
 - [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) for fast relevance scoring
-- [Vercel](https://vercel.com/) for the hosted demo
 
 Built for people who want AI answers grounded in source material they actually control.

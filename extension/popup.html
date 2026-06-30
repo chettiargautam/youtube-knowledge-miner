@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTube Knowledge Miner</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Local extension</p>
+          <h1>YouTube Knowledge Miner</h1>
+        </div>
+        <span id="backendStatus" class="status">Checking</span>
+      </header>
+
+      <section class="panel">
+        <div class="mode-row" role="tablist" aria-label="Mining mode">
+          <button id="topicMode" class="mode active" type="button">Topic</button>
+          <button id="channelMode" class="mode" type="button">Channel</button>
+        </div>
+
+        <form id="searchForm" class="search-form">
+          <label for="queryInput" id="queryLabel">Topic</label>
+          <div class="input-row">
+            <input id="queryInput" autocomplete="off" placeholder="acne skincare routine" />
+            <input id="limitInput" type="number" min="1" max="100" value="25" title="Result limit" />
+            <button id="searchButton" type="submit">Search</button>
+          </div>
+          <p id="helperText" class="helper">Uses your local backend at 127.0.0.1:8000, so YouTube sees your local network.</p>
+        </form>
+      </section>
+
+      <section id="channelChoices" class="panel hidden">
+        <div class="section-title">
+          <h2>Choose Channel</h2>
+          <span id="channelMessage"></span>
+        </div>
+        <div id="channelsList" class="list compact"></div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="section-title">
+          <h2>Videos</h2>
+          <span id="resultCount">0 selected</span>
+        </div>
+
+        <div class="toolbar">
+          <button id="selectAllButton" type="button">Select all</button>
+          <button id="clearButton" type="button">Clear</button>
+          <label class="check">
+            <input id="filePerVideoInput" type="checkbox" checked />
+            File per video
+          </label>
+        </div>
+
+        <div id="videosList" class="list empty">
+          Search a topic or channel to load videos.
+        </div>
+      </section>
+
+      <section class="panel">
+        <button id="downloadButton" class="primary" type="button" disabled>Download knowledge base</button>
+        <div id="progress" class="progress hidden">
+          <div class="progress-bar"><span id="progressFill"></span></div>
+          <p id="progressText">Preparing...</p>
+        </div>
+        <div id="message" class="message hidden"></div>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
